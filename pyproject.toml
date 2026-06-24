@@ -19,19 +19,21 @@ py-modules = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["."]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = [
     "-v",
-    "--timeout=60",
+    "--timeout=120",
     "--tb=short",
 ]
 markers = [
     "smoke: basic presence/render checks",
-    "interactive: click, type, navigate",
-    "bluetooth: device/BLE related tests",
+    "auth: login / authentication flow",
+    "navigation: sidebar navigation between pages",
+    "scribe: scribe page / note input",
+    "devices: Chronicle device / BLE related tests",
     "slow: tests that take >10s",
 ]
 

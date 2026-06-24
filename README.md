@@ -1,85 +1,75 @@
-# Heidi Desktop E2E Tests (xa11y spike)
+# Heidi Desktop E2E Tests (xa11y)
 
-Accessibility-tree-based desktop E2E tests for the Heidi app using [xa11y](https://xa11y.dev/).
+Accessibility-tree-based desktop E2E tests for the Heidi app, using
+[xa11y](https://xa11y.dev/). Feature-organised: one spec file per test case.
 
-## Prerequisites
+## ⚠️ Must run from Ghostty
 
-- macOS 26+ with **Screen & System Audio Recording** permission granted to your terminal (Ghostty)
-- Heidi app installed at `/Applications/Heidi.app`
-- Python 3.11+
+macOS 26 grants "Screen & System Audio Recording" per app bundle. xa11y reads
+window content through that permission, and **child processes of Hermes don't
+inherit it** — so run from a terminal that has the permission (Ghostty).
 
-> **⚠️ Must run from Ghostty (or another terminal with Screen Recording permission).**
-> Hermes's embedded terminal doesn't inherit the permission — the AX tree will be empty.
+## Layout
+
+```
+.
+├── conftest.py            # root fixtures: heidi_app, dump_tree, per-test video + failure screenshot
+├── lib/                   # infrastructure (not Page Objects)
+│   ├── helpers.py         #   click_first_match (selector fallback chain)
+│   └── login.py           #   Auth0 login flow
+├── pages/                 # Page Objects — HOW to operate the UI
+│   ├── sidebar.py
+│   ├── scribe.py
+│   └── device.py
+└── tests/                 # WHAT to test — one spec file per case, by feature
+    ├── smoke/             #   app launches, key elements render
+    ├── auth/              #   login
+    ├── navigation/        #   sidebar nav, new session
+    ├── scribe/            #   note input
+    └── devices/           #   device card, serial, firmware, connect, reconnect, disconnect
+```
+
+**Principle:** selectors live in `pages/`, assertions live in `tests/`. When
+the UI changes, fix the selector once in the Page Object — specs don't change.
 
 ## Setup
 
 ```bash
-cd ~/Desktop/heidi/e2e-desktop-xa11y-spike
-pip install -e .
+pip install -e .                       # or: pip install xa11y pytest pytest-html pytest-timeout
+cp .env.e2e.example .env.e2e           # then fill in HEIDI_E2E_PASSWORD (first login only)
 ```
 
-## Running tests
+## Running
 
 ```bash
-# All tests
-pytest
-
-# Smoke only (render checks)
-pytest -m smoke
-
-# Interactive tests (clicks, typing)
-pytest -m interactive
-
-# Bluetooth device tests
-pytest -m bluetooth
+pytest                                 # everything
+pytest -m smoke                        # by marker: smoke | auth | navigation | scribe | devices | slow
+pytest tests/devices/                  # by feature folder
+pytest tests/devices/test_reconnect.py # a single case
+RECORD_VIDEO=0 pytest                   # skip screen recording (faster)
 ```
 
-## Exploring the UI tree
+## Artifacts
 
-Before writing new tests, dump the AX tree to discover selectors:
+- Per-test screen recording: `reports/artifacts/<test>.mp4` (macOS `screencapture -v`)
+- Failure screenshot: `reports/artifacts/<test>__FAIL.png` (xa11y `screenshot()`)
+- Tree dumps for debugging: `reports/<label>.txt` (via the `dump_tree` fixture)
+
+## Selectors & portability
+
+xa11y matches the accessibility tree's `name` (= `aria-label` or visible text)
+and `role`. Notes from real tree dumps:
+
+- Sidebar item roles are inconsistent (button / link / combo_box) — Page
+  Objects use comma-separated role alternation, the official portable pattern.
+- Button names currently come from visible `<FormattedMessage>` text, so they
+  are i18n- and state-dependent. Adding `aria-label`s in scribe-fe-v2 would
+  make selectors stable across language and state (and works on Windows/Linux
+  too, since `name` maps to aria-label on all three platforms).
+
+## Exploration
 
 ```bash
-# Current page
-python scripts/dump_page.py
-
-# Navigate to a page first
-python scripts/dump_page.py --page Devices
-python scripts/dump_page.py --page Settings
-python scripts/dump_page.py --page Patients
+python scripts/dump_page.py --page Devices   # dump one page's tree
+python scripts/explore_all.py                # walk all pages, dump each
 ```
-
-Tree dumps are saved to `reports/` for inspection.
-
-## Writing tests
-
-```python
-def test_example(heidi_app: xa11y.App, dump_tree):
-    # Navigate
-    heidi_app.locator("static_text[value='Settings']").press()
-
-    # Wait for element
-    heidi_app.locator("heading[value*='Settings']").wait_visible(timeout=10.0)
-
-    # Assert
-    assert heidi_app.locator("button[name='Save']").exists()
-
-    # Debug: dump tree to reports/
-    dump_tree("settings_page")
-```
-
-## Selector reference
-
-| Pattern | Meaning |
-|---|---|
-| `button[name='OK']` | Button named exactly "OK" |
-| `static_text[value*='hello']` | Text containing "hello" |
-| `text_area` | Any text area |
-| `heading[value*='Ready']` | Heading containing "Ready" |
-| `group[name='Notifications']` | Named group |
-
-## Known issues
-
-- Tauri's WKWebView AX tree can be inconsistent — element names/values may vary
-- Some elements only have `value` set, not `name`
-- `static_text` elements often use `value` for visible text, `name` is empty
-- Run `dump_page.py` whenever selectors break to re-discover the tree

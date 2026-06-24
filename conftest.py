@@ -57,7 +57,7 @@ def dump_tree(heidi_app: xa11y.App):
     Usage inside a test:
         dump_tree("after_click_devices")   # saved to reports/after_click_devices.txt
     """
-    reports = Path(__file__).resolve().parent.parent / "reports"
+    reports = Path(__file__).resolve().parent / "reports"
     reports.mkdir(exist_ok=True)
 
     def _dump(label: str, max_depth: int = 12):
@@ -71,7 +71,7 @@ def dump_tree(heidi_app: xa11y.App):
 # ---------------------------------------------------------------------------
 # Recording & screenshots
 # ---------------------------------------------------------------------------
-ARTIFACTS = Path(__file__).resolve().parent.parent / "reports" / "artifacts"
+ARTIFACTS = Path(__file__).resolve().parent / "reports" / "artifacts"
 
 # Toggle recording with RECORD_VIDEO=0 to skip (faster local runs).
 RECORD_VIDEO = os.environ.get("RECORD_VIDEO", "1") != "0"
