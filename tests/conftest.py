@@ -7,6 +7,7 @@ process doesn't inherit the permission on macOS 26.
 """
 import json
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -65,3 +66,82 @@ def dump_tree(heidi_app: xa11y.App):
         return path
 
     return _dump
+
+
+# ---------------------------------------------------------------------------
+# Recording & screenshots
+# ---------------------------------------------------------------------------
+ARTIFACTS = Path(__file__).resolve().parent.parent / "reports" / "artifacts"
+
+# Toggle recording with RECORD_VIDEO=0 to skip (faster local runs).
+RECORD_VIDEO = os.environ.get("RECORD_VIDEO", "1") != "0"
+
+
+def _safe_name(nodeid: str) -> str:
+    """Turn a pytest nodeid into a filesystem-safe stem."""
+    return (
+        nodeid.replace("::", "__")
+        .replace("/", "_")
+        .replace("[", "_")
+        .replace("]", "")
+        .replace(" ", "_")
+    )
+
+
+@pytest.fixture(autouse=True)
+def record_test(request):
+    """Record a screen video of each test via macOS `screencapture -v`.
+
+    - One .mp4 per test under reports/artifacts/.
+    - screencapture is built into macOS (no ffmpeg needed).
+    - Requires Screen Recording permission (already needed for xa11y).
+    - Set RECORD_VIDEO=0 to disable.
+    """
+    if not RECORD_VIDEO:
+        yield
+        return
+
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    stem = _safe_name(request.node.nodeid)
+    video_path = ARTIFACTS / f"{stem}.mp4"
+
+    # -v: video, -x: no sound, -C: capture cursor. Records the full screen.
+    # NOTE: screencapture -v only writes the file when stopped via SIGINT
+    # (Ctrl-C). Sending newline to stdin does NOT save it — must signal.
+    if video_path.exists():
+        video_path.unlink()
+    proc = subprocess.Popen(
+        ["screencapture", "-v", "-x", "-C", str(video_path)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(1.0)  # let the recorder spin up
+
+    try:
+        yield
+    finally:
+        # Stop with SIGINT so screencapture flushes and writes the .mp4.
+        try:
+            proc.send_signal(signal.SIGINT)
+            proc.wait(timeout=15)
+        except Exception:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                proc.kill()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """On failure, capture a screenshot via xa11y (official-recommended pattern)."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.when == "call" and report.failed:
+        ARTIFACTS.mkdir(parents=True, exist_ok=True)
+        stem = _safe_name(item.nodeid)
+        try:
+            xa11y.screenshot().save_png(str(ARTIFACTS / f"{stem}__FAIL.png"))
+        except Exception:
+            pass  # capture failure must not mask the test failure
