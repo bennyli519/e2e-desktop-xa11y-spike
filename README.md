@@ -3,6 +3,16 @@
 Accessibility-tree-based desktop E2E tests for the Heidi app, using
 [xa11y](https://xa11y.dev/). Feature-organised: one spec file per test case.
 
+> **Status: spike.** Proven end-to-end (incl. Auth0 login). Structured for the
+> team to build on. See the docs below before extending.
+
+## Docs
+
+- [`docs/DESIGN.md`](docs/DESIGN.md) — architecture, layering, selector strategy.
+- [`docs/FINDINGS.md`](docs/FINDINGS.md) — spike evaluation: xa11y vs cua-driver,
+  every pitfall hit + its fix, cross-platform outlook, recommendation.
+- [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) — how to add tests / Page Objects.
+
 ## ⚠️ Must run from Ghostty
 
 macOS 26 grants "Screen & System Audio Recording" per app bundle. xa11y reads
