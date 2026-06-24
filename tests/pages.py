@@ -108,6 +108,9 @@ class DevicePage:
     <FormattedMessage> text ('Reconnect' / 'Disconnect' / 'Reconnecting…'),
     which is i18n- and state-dependent. Once aria-labels are added in
     scribe-fe-v2, switch these to stable name selectors.
+
+    Modal handling and exact button labels are ported from the cua-driver
+    framework's DevicePage (tests/Desktop-E2E-Test/pages/device.py).
     """
 
     def __init__(self, app: xa11y.App):
@@ -115,7 +118,40 @@ class DevicePage:
         self.sidebar = Sidebar(app)
 
     def open(self) -> bool:
+        self.dismiss_modals()
         return self.sidebar.go_to_devices()
+
+    # --- modal handling ---
+    def dismiss_modals(self) -> None:
+        """Dismiss blocking modals that hide the device card / sidebar.
+
+        Known blockers (from cua-driver experience):
+          - Firmware update modal -> "Remind me later"
+          - Connection error modal -> Escape
+          - "Can't find your Heidi Remote" full-page overlay -> Cmd+R reload
+          - Generic Settings-style modal -> "Close"
+        """
+        sim = xa11y.input_sim()
+
+        # Firmware update: "Remind me later"
+        if _click_first_match(self.app, ["button[name='Remind me later']"], "Remind"):
+            time.sleep(1)
+            return
+
+        # "Can't find your Heidi Remote" full-page overlay -> reload webview
+        if self.app.locator("static_text[value*=\"Can't find your Heidi Remote\"]").exists():
+            sim.chord("r", ["Meta"])  # Cmd+R reload
+            time.sleep(3)
+            return
+
+        # Generic close / escape for any other modal
+        if self.app.locator("button[name='Close']").exists():
+            _click_first_match(self.app, ["button[name='Close']"], "Close")
+            time.sleep(0.8)
+            return
+        # Connection-error modal: Escape
+        sim.press("Escape")
+        time.sleep(0.3)
 
     # --- state ---
     def is_connected(self) -> bool:
@@ -133,8 +169,25 @@ class DevicePage:
         # Serial number line is always present on a paired device card
         return self.app.locator("static_text[value*='Serial number']").exists()
 
+    def get_serial_number(self) -> str | None:
+        for el in self.app.locator("static_text[value*='Serial number']").elements():
+            val = el.value or ""
+            if "Serial number" in val:
+                # format: "Serial number: HV0..."
+                parts = val.split(":", 1)
+                if len(parts) == 2:
+                    return parts[1].strip()
+        return None
+
+    def has_firmware_version(self) -> bool:
+        return self.app.locator("static_text[value*='Firmware version']").exists()
+
+    def has_battery(self) -> bool:
+        return self.app.locator("static_text[value*='Battery']").exists()
+
     # --- actions ---
     def reconnect(self) -> bool:
+        self.dismiss_modals()
         return _click_first_match(
             self.app,
             [
