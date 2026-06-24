@@ -1,3 +1,4 @@
+.env.e2e
 reports/
 __pycache__/
 *.pyc
