@@ -13,6 +13,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff", "mypy"]
 
+[tool.setuptools]
+# This is a test suite, not an importable package — don't auto-discover packages.
+py-modules = []
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
