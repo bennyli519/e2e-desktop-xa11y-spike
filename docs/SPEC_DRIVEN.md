@@ -9,7 +9,7 @@ acceptance test first, then develop until it passes.**
    Mode 1  ──────┤  tests/  pages/    ├────── Mode 2
   Dev Verify     └───────────────────┘     E2E with Bundle
   pnpm tauri:dev                            built .app / CI
-  HEIDI_ENV=dev                             HEIDI_ENV=default|prod
+  HEIDI_DEV=1                             (default) / HEIDI_APP_PATH
 ```
 
 ## Mode 1 — Dev Verify (drive AI development)
@@ -22,7 +22,7 @@ allowed to fail (red); you develop until it's green.
 2. Write the spec describing the expected behaviour  ── it FAILS (red).
 3. Develop the feature in scribe-fe-v2.
 4. Hot-reload runs automatically (pnpm tauri:dev).
-5. Re-run the spec:  HEIDI_ENV=dev pytest tests/devices/test_reconnect.py
+5. Re-run the spec:  HEIDI_DEV=1 pytest tests/devices/test_reconnect.py
 6. Repeat 3–5 until GREEN.
 7. The spec stays in the repo as a permanent regression test.
 ```
@@ -34,10 +34,10 @@ Setup:
 pnpm tauri:dev
 
 # terminal 2 — Ghostty, in this repo
-HEIDI_ENV=dev pytest tests/<feature>/ -v -s
+HEIDI_DEV=1 pytest tests/<feature>/ -v -s
 ```
 
-Why `HEIDI_ENV=dev`: it attaches to the running `pnpm tauri:dev` debug binary
+Why `HEIDI_DEV=1`: it attaches to the running `pnpm tauri:dev` debug binary
 by PID (never launches it). See README "Choosing which Heidi build to test".
 
 ### Working with an AI assistant
@@ -47,7 +47,7 @@ child processes — see CLAUDE.md). So the loop is:
 
 - **You** describe the ticket + acceptance criteria.
 - **AI** writes the spec (red), then implements the feature in scribe-fe-v2.
-- **You** run `HEIDI_ENV=dev pytest ...` in Ghostty and paste back the result
+- **You** run `HEIDI_DEV=1 pytest ...` in Ghostty and paste back the result
   (and `reports/artifacts/*.mp4` / `reports/*.txt` on failure).
 - **AI** reads the failure, fixes, repeats — until green.
 
@@ -61,7 +61,7 @@ is the gate before shipping.
 pnpm tauri:build-staging          # or build-production
 
 # run the full suite against it
-HEIDI_ENV=default pytest          # installed /Applications/Heidi.app
+pytest                            # default: open -a Heidi (installed app)
 # or point at the freshly built bundle:
 HEIDI_APP_PATH="/path/to/Built.app" pytest
 ```

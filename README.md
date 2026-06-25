@@ -94,31 +94,36 @@ RECORD_VIDEO=0 pytest                      # skip screen recording (faster)
 
 ### Choosing which Heidi build to test
 
-Multiple Heidi builds share the same bundle id and AX name ("Heidi"), so the
-suite selects a build by `HEIDI_ENV` and attaches to it **by PID** (matched on
-the executable path) — never grabbing the wrong one.
+**Default: zero config.** The suite launches Heidi with `open -a Heidi`
+(LaunchServices finds it wherever it's installed — no hard-coded paths) and
+attaches by name. On any machine with Heidi installed, just run `pytest`.
+
+Override only for special cases, via env vars (priority order):
 
 ```bash
-pytest                          # HEIDI_ENV=default -> /Applications/Heidi.app (auto-launches)
-HEIDI_ENV=prod pytest           # /Applications/Heidi Prod 2.2.0.app
-HEIDI_ENV=dev pytest            # the `pnpm tauri:dev` debug build (attach-only)
-HEIDI_APP_PATH=/Applications/MyHeidi.app pytest   # explicit path
-HEIDI_PID=16215 pytest          # attach to one exact running process
+pytest                                  # default: open -a Heidi + attach by name
+HEIDI_DEV=1 pytest                      # attach to a running `pnpm tauri:dev` build
+HEIDI_PID=16215 pytest                  # attach to one exact running process
+HEIDI_APP_PATH="/Applications/Heidi Prod 2.2.0.app" pytest   # a specific .app
+HEIDI_APP_NAME="Heidi(Staging)" pytest  # different app/AX name for open -a + by_name
 ```
 
-**Testing your local dev build** (`pnpm tauri:dev`): start it yourself first,
-then point the suite at it — it is attach-only and never launched by the tests:
+- **`HEIDI_DEV=1`** — for local dev. Start `pnpm tauri:dev` yourself first; the
+  suite only attaches (never launches it). Binary path defaults to
+  `~/Desktop/heidi/scribe-fe-v2/src-tauri/target/debug/app`, override with
+  `SCRIBE_FE_PATH` or `HEIDI_DEV_BIN`.
+- **`HEIDI_APP_PATH`** — only needed when you have MULTIPLE same-named Heidi
+  builds on one machine and must disambiguate by path.
+
+**Testing your local dev build** (`pnpm tauri:dev`):
 
 ```bash
 # terminal 1: in scribe-fe-v2
 pnpm tauri:dev
 
 # terminal 2 (Ghostty): in this repo
-HEIDI_ENV=dev pytest -m smoke
+HEIDI_DEV=1 pytest -m smoke
 ```
-
-Builds are configured in `APP_ENVS` at the top of `conftest.py` — add your own
-(`staging`, etc.) there.
 
 ---
 

@@ -118,19 +118,30 @@ the Page Object method once; specs are untouched.
 Two modes, shared specs + Page Objects (see `docs/SPEC_DRIVEN.md`):
 
 - **Mode 1 — Dev Verify**: write a spec FIRST (it fails), then develop the
-  feature until green. `HEIDI_ENV=dev` attaches to `pnpm tauri:dev`. This is
+  feature until green. `HEIDI_DEV=1` attaches to `pnpm tauri:dev`. This is
   how the AI loop should run: AI writes spec + feature code, human runs
-  `HEIDI_ENV=dev pytest tests/<feature>/` in Ghostty, pastes results back.
+  `HEIDI_DEV=1 pytest tests/<feature>/` in Ghostty, pastes results back.
 - **Mode 2 — E2E with Bundle**: full regression against a built `.app`
-  (`HEIDI_ENV=default`/`prod` or `HEIDI_APP_PATH`), the release gate / CI.
+  (`default / HEIDI_APP_PATH` or `HEIDI_APP_PATH`), the release gate / CI.
 
 New ticket → copy `templates/test_TICKET_template.py` into the right
 `tests/<feature>/` folder, encode the acceptance criteria as GIVEN/WHEN/THEN
 assertions, develop until green, keep it as a regression test.
 
-## Multi-build selection
+## App launch / selection
 
-`HEIDI_ENV` picks which Heidi to target; the suite attaches by PID (matched on
-the executable path) so identically-named builds don't collide:
-`default` / `prod` / `v2` / `dev`, configured in `APP_ENVS` in `conftest.py`.
-`HEIDI_PID=<pid>` pins one exact process; `HEIDI_APP_PATH` overrides the path.
+**Default is portable & zero-config**: `open -a Heidi` (LaunchServices finds it
+anywhere — no hard-coded paths) + attach by name. `pytest` just works on any
+machine with Heidi installed.
+
+Env-var overrides (priority order), all optional:
+- `HEIDI_PID=<pid>` — attach to one exact process.
+- `HEIDI_DEV=1` — attach to a running `pnpm tauri:dev` debug binary (attach-only;
+  path from `SCRIBE_FE_PATH`/`HEIDI_DEV_BIN`). For local dev (Mode 1).
+- `HEIDI_APP_PATH=/x.app` — launch a specific .app by path; only needed to
+  disambiguate MULTIPLE same-named builds on one machine.
+- `HEIDI_APP_NAME=Heidi(Staging)` — different AX/app name for open -a + by_name.
+
+`HEIDI_DEV=1` is the Mode 1 (dev verify) selector; default/HEIDI_APP_PATH is
+Mode 2 (bundle). PID-matching (executable-path) is only used in the dev and
+explicit-path branches, to skip helper subprocesses.

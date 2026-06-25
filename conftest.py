@@ -16,42 +16,32 @@ import pytest
 import xa11y
 
 # ---------------------------------------------------------------------------
-# Config
+# Config — how to find / launch the Heidi app
 # ---------------------------------------------------------------------------
-# You may have MULTIPLE Heidi builds (prod / staging / installed / dev) that all
-# share the same bundle id (com.Heidi.dev) and AX name ("Heidi"). by_name alone
-# can't tell them apart, so we select a build by ENV and attach to the matching
-# process by PID (matched on its executable path).
+# DEFAULT (portable, zero-config): launch with `open -a Heidi` and attach with
+# App.by_name("Heidi"). This works on any machine that has Heidi installed,
+# wherever it lives — no hard-coded paths. Good for ~everyone.
 #
-# Pick the build with HEIDI_ENV. Two kinds of entry:
-#   - "path": an installed .app bundle  -> launched with `open -a` if not running
-#   - "dev_bin": the `pnpm tauri:dev` debug binary -> attach only, NEVER launched
-#     (you start it yourself with `pnpm tauri:dev`; tests just connect to it)
+# OPTIONAL overrides (env vars), in priority order:
+#   HEIDI_PID=1234         attach to one exact running process (most explicit)
+#   HEIDI_DEV=1            attach to the `pnpm tauri:dev` debug binary
+#                          (attach-only; you start it yourself). Path comes from
+#                          SCRIBE_FE_PATH (default ~/Desktop/heidi/scribe-fe-v2).
+#   HEIDI_APP_PATH=/x.app  launch that specific .app bundle by path — use this
+#                          when you have MULTIPLE same-named Heidi builds on one
+#                          machine and need to disambiguate.
+#   HEIDI_APP_NAME=Heidi   the AX/app name used for `open -a` and by_name.
 #
-# Override the resolved path with HEIDI_APP_PATH, or pin a process with HEIDI_PID.
+# Most people set NOTHING and the default just works.
+APP_NAME = os.environ.get("HEIDI_APP_NAME", "Heidi")
+HEIDI_PID = os.environ.get("HEIDI_PID")
+HEIDI_DEV = os.environ.get("HEIDI_DEV") == "1"
+HEIDI_APP_PATH = os.environ.get("HEIDI_APP_PATH")  # absolute path to a .app
 SCRIBE_FE = os.environ.get(
     "SCRIBE_FE_PATH", str(Path.home() / "Desktop" / "heidi" / "scribe-fe-v2")
 )
+DEV_BIN = os.environ.get("HEIDI_DEV_BIN", f"{SCRIBE_FE}/src-tauri/target/debug/app")
 
-APP_ENVS: dict[str, dict] = {
-    "default": {"path": "/Applications/Heidi.app"},
-    "prod": {"path": "/Applications/Heidi Prod 2.2.0.app"},
-    "v2": {"path": "/Applications/Heidi 2.app"},
-    # dev = `pnpm tauri:dev` debug binary. Attach-only: start it yourself first.
-    "dev": {"dev_bin": f"{SCRIBE_FE}/src-tauri/target/debug/app"},
-    # add your own: "staging": {"path": "/Applications/Heidi(Staging).app"},
-}
-
-HEIDI_ENV = os.environ.get("HEIDI_ENV", "default")
-_env_cfg = APP_ENVS.get(HEIDI_ENV, APP_ENVS["default"])
-
-# Resolved targets. APP_PATH = installed .app (launchable). DEV_BIN = debug exe
-# (attach-only). HEIDI_APP_PATH overrides whichever applies.
-APP_PATH = os.environ.get("HEIDI_APP_PATH") or _env_cfg.get("path")
-DEV_BIN = os.environ.get("HEIDI_DEV_BIN") or _env_cfg.get("dev_bin")
-
-APP_NAME = os.environ.get("HEIDI_APP_NAME", "Heidi")
-HEIDI_PID = os.environ.get("HEIDI_PID")  # attach to a specific running process
 STARTUP_TIMEOUT = float(os.environ.get("HEIDI_STARTUP_TIMEOUT", "30"))
 DEFAULT_TIMEOUT = float(os.environ.get("XA11Y_DEFAULT_TIMEOUT", "10"))
 
@@ -64,12 +54,8 @@ xa11y.set_default_timeout(DEFAULT_TIMEOUT)
 # ---------------------------------------------------------------------------
 def _pid_for_exe(exe_match: str) -> int | None:
     """Return the PID of the MAIN process whose executable path contains
-    `exe_match`, or None.
-
-    Matches on the executable path so we connect to the SPECIFIC build, not
-    whichever same-named Heidi happens to be running. Filters out helper
-    subprocesses (crash reporter, GPU/renderer helpers) which share the path
-    but carry extra CLI args — we want the bare-executable main process.
+    `exe_match`, or None. Filters out helper subprocesses (crash reporter,
+    GPU/renderer helpers) that share the path but carry extra CLI args.
     """
     try:
         out = subprocess.run(
@@ -90,7 +76,6 @@ def _pid_for_exe(exe_match: str) -> int | None:
             ).stdout.strip()
         except Exception:
             continue
-        # Main process runs the bare executable; helpers carry --type=, etc.
         if "--" not in cmd and "--type=" not in cmd:
             candidates.append(pid)
 
@@ -100,64 +85,68 @@ def _pid_for_exe(exe_match: str) -> int | None:
     return min(pids) if pids else None
 
 
+def _attach_ready(app: xa11y.App) -> xa11y.App:
+    """Wait until the web_area is rendered, then return the app."""
+    app.locator("web_area").wait_visible(timeout=STARTUP_TIMEOUT)
+    return app
+
+
 @pytest.fixture(scope="session")
 def heidi_app() -> xa11y.App:
-    """Return an xa11y App handle for the selected Heidi build.
+    """Return an xa11y App handle for Heidi.
 
-    Resolution order:
-      1. HEIDI_PID env var -> attach to that exact process.
-      2. HEIDI_ENV=dev (or any dev_bin entry) -> attach to the running
-         `pnpm tauri:dev` debug binary. ATTACH-ONLY: it is never launched here;
-         start it yourself first. Fails with a clear message if not running.
-      3. An installed .app (path entry): attach to it if running, else launch
-         it with `open -a` and attach to the new PID.
-
-    Attaching by PID (matched on the executable path) is what lets multiple
-    identically-named Heidi builds coexist without grabbing the wrong one.
+    Default behaviour is fully portable: `open -a Heidi` to launch (if needed),
+    then attach by name. Override via env vars for special cases — see the
+    Config block above.
     """
-    # 1. Explicit PID override
+    # 1. Explicit PID — attach to exactly that process.
     if HEIDI_PID:
-        app = xa11y.App.by_pid(int(HEIDI_PID), timeout=STARTUP_TIMEOUT)
-        app.locator("web_area").wait_visible(timeout=STARTUP_TIMEOUT)
-        return app
+        return _attach_ready(xa11y.App.by_pid(int(HEIDI_PID), timeout=STARTUP_TIMEOUT))
 
-    # 2. dev binary (pnpm tauri:dev) — attach only, never launch
-    if DEV_BIN:
+    # 2. Dev binary (pnpm tauri:dev) — attach only, never launched here.
+    if HEIDI_DEV:
         pid = _pid_for_exe(DEV_BIN)
         if pid is None:
             raise RuntimeError(
-                f"HEIDI_ENV={HEIDI_ENV} expects the dev build running, but no "
-                f"process matched {DEV_BIN!r}. Start it first:\n"
-                f"  cd {SCRIBE_FE} && pnpm tauri:dev\n"
-                f"(or set HEIDI_PID to the running dev process)."
+                f"HEIDI_DEV=1 but no process matched {DEV_BIN!r}. Start it first:\n"
+                f"  cd {SCRIBE_FE} && pnpm tauri:dev"
             )
-        app = xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT)
-        app.locator("web_area").wait_visible(timeout=STARTUP_TIMEOUT)
-        return app
+        return _attach_ready(xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT))
 
-    # 3. Installed .app — attach if running, else launch it
-    if not APP_PATH:
-        raise RuntimeError(
-            f"No target resolved for HEIDI_ENV={HEIDI_ENV!r}. "
-            f"Set a valid HEIDI_ENV ({', '.join(APP_ENVS)}), or HEIDI_APP_PATH."
-        )
-    exe_match = str(Path(APP_PATH) / "Contents" / "MacOS")
-    pid = _pid_for_exe(exe_match)
-    if pid is None:
-        subprocess.Popen(["open", "-a", APP_PATH])
-        deadline = time.time() + STARTUP_TIMEOUT
-        while time.time() < deadline and pid is None:
-            time.sleep(1)
-            pid = _pid_for_exe(exe_match)
+    # 3. Explicit .app path — launch THAT bundle, attach by its PID. For
+    #    disambiguating multiple same-named builds on one machine.
+    if HEIDI_APP_PATH:
+        exe_match = str(Path(HEIDI_APP_PATH) / "Contents" / "MacOS")
+        pid = _pid_for_exe(exe_match)
         if pid is None:
-            raise RuntimeError(
-                f"Launched {APP_PATH} but no process appeared within "
-                f"{STARTUP_TIMEOUT}s (HEIDI_ENV={HEIDI_ENV})"
-            )
+            subprocess.Popen(["open", "-a", HEIDI_APP_PATH])
+            deadline = time.time() + STARTUP_TIMEOUT
+            while time.time() < deadline and pid is None:
+                time.sleep(1)
+                pid = _pid_for_exe(exe_match)
+            if pid is None:
+                raise RuntimeError(
+                    f"Launched {HEIDI_APP_PATH} but no process appeared within "
+                    f"{STARTUP_TIMEOUT}s"
+                )
+        return _attach_ready(xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT))
 
-    app = xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT)
-    app.locator("web_area").wait_visible(timeout=STARTUP_TIMEOUT)
-    return app
+    # 4. DEFAULT (portable): launch by name via LaunchServices, attach by name.
+    try:
+        app = xa11y.App.by_name(APP_NAME, timeout=3.0)
+    except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
+        # Not running — `open -a` resolves the app wherever it's installed.
+        result = subprocess.run(
+            ["open", "-a", APP_NAME], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Could not launch {APP_NAME!r} with `open -a` "
+                f"({result.stderr.strip()}). Is it installed? "
+                f"Set HEIDI_APP_PATH to an explicit .app, or HEIDI_APP_NAME."
+            )
+        app = xa11y.App.by_name(APP_NAME, timeout=STARTUP_TIMEOUT)
+    return _attach_ready(app)
 
 
 @pytest.fixture(autouse=True)
