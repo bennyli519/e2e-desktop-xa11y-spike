@@ -20,6 +20,7 @@ py-modules = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+norecursedirs = ["templates", "scripts", "reports", ".venv", "*.egg-info"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"

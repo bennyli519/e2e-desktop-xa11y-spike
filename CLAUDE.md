@@ -112,3 +112,25 @@ the Page Object method once; specs are untouched.
 4. Wire CI with `xa11y/setup-a11y` once green locally.
 5. Expand coverage mirroring the cua-driver matrix (connection, onboarding,
    recording, firmware, sessions).
+
+## Spec-driven workflow (the intended use)
+
+Two modes, shared specs + Page Objects (see `docs/SPEC_DRIVEN.md`):
+
+- **Mode 1 — Dev Verify**: write a spec FIRST (it fails), then develop the
+  feature until green. `HEIDI_ENV=dev` attaches to `pnpm tauri:dev`. This is
+  how the AI loop should run: AI writes spec + feature code, human runs
+  `HEIDI_ENV=dev pytest tests/<feature>/` in Ghostty, pastes results back.
+- **Mode 2 — E2E with Bundle**: full regression against a built `.app`
+  (`HEIDI_ENV=default`/`prod` or `HEIDI_APP_PATH`), the release gate / CI.
+
+New ticket → copy `templates/test_TICKET_template.py` into the right
+`tests/<feature>/` folder, encode the acceptance criteria as GIVEN/WHEN/THEN
+assertions, develop until green, keep it as a regression test.
+
+## Multi-build selection
+
+`HEIDI_ENV` picks which Heidi to target; the suite attaches by PID (matched on
+the executable path) so identically-named builds don't collide:
+`default` / `prod` / `v2` / `dev`, configured in `APP_ENVS` in `conftest.py`.
+`HEIDI_PID=<pid>` pins one exact process; `HEIDI_APP_PATH` overrides the path.

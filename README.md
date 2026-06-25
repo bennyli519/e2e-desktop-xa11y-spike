@@ -10,6 +10,8 @@ Accessibility-tree-based desktop E2E tests for the Heidi macOS app, using
 ## Docs
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) — architecture, layering, selector strategy.
+- [`docs/SPEC_DRIVEN.md`](docs/SPEC_DRIVEN.md) — the two modes (dev verify / E2E
+  bundle) and the write-spec-first → develop-until-green workflow.
 - [`docs/FINDINGS.md`](docs/FINDINGS.md) — spike evaluation: xa11y vs cua-driver,
   every pitfall + fix, cross-platform outlook, recommendation.
 - [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) — how to add tests / Page Objects.
