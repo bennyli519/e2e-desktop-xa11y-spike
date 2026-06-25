@@ -35,7 +35,10 @@ def heidi_app() -> xa11y.App:
     """Return an xa11y App handle for Heidi, launching it if needed."""
     try:
         app = xa11y.App.by_name(APP_NAME, timeout=3.0)
-    except xa11y.TimeoutError:
+    except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
+        # App not running yet — launch it and wait for it to register with the
+        # accessibility API. (by_name raises SelectorNotMatchedError, not
+        # TimeoutError, when no running app matches.)
         subprocess.Popen(["open", "-a", APP_PATH])
         app = xa11y.App.by_name(APP_NAME, timeout=STARTUP_TIMEOUT)
 
