@@ -42,6 +42,20 @@ source .venv/bin/activate
 pip install -e .          # installs xa11y, pytest, pytest-html, pytest-timeout
 ```
 
+> **The venv must be active for `pytest` to work.** A new terminal starts with a
+> clean PATH, so `pytest` → "command not found" until you `source .venv/bin/activate`.
+> To auto-activate when you `cd` into the repo, add this to `~/.zshrc`:
+>
+> ```zsh
+> _heidi_e2e_autoenv() {
+>   local repo="$HOME/Desktop/heidi/e2e-desktop-xa11y-spike"
+>   if [[ "$PWD" == "$repo"* && "$VIRTUAL_ENV" != "$repo/.venv" && -f "$repo/.venv/bin/activate" ]]; then
+>     source "$repo/.venv/bin/activate"
+>   fi
+> }
+> autoload -Uz add-zsh-hook && add-zsh-hook chpwd _heidi_e2e_autoenv && _heidi_e2e_autoenv
+> ```
+
 ### 3. Grant macOS permissions (one-time, critical)
 
 xa11y reads window content through TWO permissions. Grant BOTH to **the terminal
