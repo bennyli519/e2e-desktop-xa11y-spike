@@ -76,6 +76,34 @@ pytest tests/devices/test_reconnect.py    # one case
 RECORD_VIDEO=0 pytest                      # skip screen recording (faster)
 ```
 
+### Choosing which Heidi build to test
+
+Multiple Heidi builds share the same bundle id and AX name ("Heidi"), so the
+suite selects a build by `HEIDI_ENV` and attaches to it **by PID** (matched on
+the executable path) — never grabbing the wrong one.
+
+```bash
+pytest                          # HEIDI_ENV=default -> /Applications/Heidi.app (auto-launches)
+HEIDI_ENV=prod pytest           # /Applications/Heidi Prod 2.2.0.app
+HEIDI_ENV=dev pytest            # the `pnpm tauri:dev` debug build (attach-only)
+HEIDI_APP_PATH=/Applications/MyHeidi.app pytest   # explicit path
+HEIDI_PID=16215 pytest          # attach to one exact running process
+```
+
+**Testing your local dev build** (`pnpm tauri:dev`): start it yourself first,
+then point the suite at it — it is attach-only and never launched by the tests:
+
+```bash
+# terminal 1: in scribe-fe-v2
+pnpm tauri:dev
+
+# terminal 2 (Ghostty): in this repo
+HEIDI_ENV=dev pytest -m smoke
+```
+
+Builds are configured in `APP_ENVS` at the top of `conftest.py` — add your own
+(`staging`, etc.) there.
+
 ---
 
 ## Layout
