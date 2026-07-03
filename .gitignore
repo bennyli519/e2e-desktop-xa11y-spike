@@ -9,3 +9,11 @@ dist/
 build/
 .ruff_cache/
 .DS_Store
+
+# secrets — never commit
+.env.e2e
+.env
+*.env
+
+# audio: keep committed wav, ignore intermediate aiff
+assets/*.aiff
