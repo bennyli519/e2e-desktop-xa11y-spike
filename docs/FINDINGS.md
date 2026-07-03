@@ -122,3 +122,88 @@ login flow needs a per-platform implementation.
 3. Wire CI with `xa11y/setup-a11y` once the suite is green locally.
 4. Expand coverage feature-by-feature, mirroring the cua-driver suite's matrix
    (connection, onboarding, recording, firmware, sessions).
+
+---
+
+## POC: recording → note generation (Linear APP-7808)
+
+A focused POC to answer "can xa11y drive the real recording + note-generation
+flow end-to-end", for comparison against the WDIO true-app POC.
+
+### Scenario proven
+
+`login → new session → start recording → wait ~30s → stop → note generation`
+
+Ran green locally: `tests/recording/test_record_note_generation.py::
+test_record_stop_note_generation PASSED (29.75s)`. The test asserts the
+recording timer actually advances (proving live capture, not a frozen UI),
+that stop takes effect, and that note generation is triggered.
+
+### Selectors discovered (all stable role+name, no coordinates)
+
+| Control | Selector | Notes |
+|---|---|---|
+| Start recording | `button[name*='Transcribe']` | full name: "Transcribe Open transcription mode menu"; doubles as start |
+| Recording timer | `static_text` value `mm:ss` | polled to prove liveness (00:00 → 00:16) |
+| While recording | `button[name='Pause transcribing']`, `button[name='End recording']` | only present mid-recording |
+| Stop | `button[name='End recording']` | |
+| Note generation started | `static_text[value*='Analyzing transcript']`, `button[name='Stop generating']` | appears immediately after stop |
+| Transcript available | `button[name='Transcript']` (new tab) | tab_group gains this after capture |
+
+Discovered by walking the flow with `scripts/probe_recording.py` and reading
+`reports/rec_*.txt` — never guessed.
+
+### Note-generation assertion (scope: "starts or completes")
+
+Per the ticket we assert generation **starts** (the "Analyzing transcript" /
+"Stop generating" markers, or the Transcript tab appearing) rather than
+matching exact note text. Structural, non-empty checks — robust to content
+variation.
+
+### Audio injection (BlackHole)
+
+Heidi only transcribes real mic audio. `lib/audio.py` + `tests/recording/
+conftest.py` route the system mic to a **BlackHole 2ch** loopback and loop a
+fixed `say`-generated consult clip (`assets/consult_30s.wav`) for the recording
+duration, then restore the original devices. If BlackHole isn't installed the
+fixture degrades to a no-op so the UI flow still runs (the flow reached note
+generation even with silent audio in testing).
+
+Setup: `scripts/setup_audio.sh` (installs `blackhole-2ch` + `switchaudio-osx`,
+regenerates the clip). **BlackHole needs sudo + a reboot** to register as a
+device — the one real setup-friction point.
+
+### Configurable duration
+
+`RECORD_SECONDS` env var controls recording length: default 30 (ticket),
+`RECORD_SECONDS=600` for a 10-minute long-session run. One code path, any
+duration. `test_record_note_generation.py` carries `timeout(300)` so a long run
+isn't killed by the global 120s cap.
+
+### POC assessment vs ticket criteria
+
+| Criterion | Result |
+|---|---|
+| xa11y drives the real app | ✅ launched/attached and drove the full flow |
+| Attempts login → record → stop → note-gen | ✅ all four stages exercised, green |
+| No secrets committed/logged | ✅ password in gitignored `.env.e2e`; nothing logged |
+| Findings sufficient vs WDIO | ✅ selectors, runtime, flake, setup captured below |
+
+- **Setup friction:** low, except BlackHole's sudo+reboot. Everything else is
+  `pip install -e .` + macOS permissions.
+- **Selector/API ergonomics:** excellent — the recording controls have clean,
+  stable accessible names; Playwright-style `wait_visible` removed all sleeps
+  from the control logic.
+- **Runtime:** ~30s for the 30s scenario (dominated by the recording wait
+  itself), negligible framework overhead.
+- **Flake risk:** one real hazard — the AX tree momentarily collapses to a stub
+  during the new-session view transition (observed: 54-char tree). Mitigation:
+  poll `web_area` visible before dumping/acting; the Page Object's
+  `wait_visible` guards already cover this.
+- **Debuggability:** stage dumps (`reports/rec_*.txt`) + per-test video +
+  failure screenshots make it easy to see exactly where a run diverged.
+
+**Recommendation: adopt** for recording E2E. The flow is fully drivable via
+stable selectors; the only nontrivial dependency is the BlackHole audio harness,
+which is a one-time setup and cleanly isolated in `lib/audio.py`.
+

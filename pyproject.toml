@@ -35,6 +35,7 @@ markers = [
     "navigation: sidebar navigation between pages",
     "scribe: scribe page / note input",
     "devices: Chronicle device / BLE related tests",
+    "recording: session recording + note generation (POC APP-7808)",
     "slow: tests that take >10s",
 ]
 

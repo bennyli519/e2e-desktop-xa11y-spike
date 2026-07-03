@@ -97,9 +97,10 @@ def _force_abc_input_source() -> None:
 # State detection
 # ---------------------------------------------------------------------------
 LOGGED_IN_MARKERS = [
-    "static_text[value='Scribe']",
-    "static_text[value='Devices']",
-    "static_text[value*='Transcribe']",
+    "button[name='Scribe']",
+    "button[name='New session']",
+    "combo_box[name='Devices']",
+    "static_text[value='Scribe']",  # legacy fallback
 ]
 
 LOGIN_PAGE_MARKERS = [

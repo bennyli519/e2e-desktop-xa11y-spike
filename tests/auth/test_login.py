@@ -13,7 +13,10 @@ import xa11y
 
 from lib.login import LoginError, is_logged_in, is_on_login_page, perform_login
 
-pytestmark = [pytest.mark.auth, pytest.mark.slow]
+# Full Auth0 flow (swift IME setup + char-by-char password + redirect polling)
+# routinely exceeds the global 120s timeout on a cold first login. Give this
+# case its own budget; it's a no-op once the Auth0 token persists.
+pytestmark = [pytest.mark.auth, pytest.mark.slow, pytest.mark.timeout(300)]
 
 
 def test_auto_login(heidi_app: xa11y.App, dump_tree):
