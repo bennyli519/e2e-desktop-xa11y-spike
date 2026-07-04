@@ -1,0 +1,45 @@
+name: recording-e2e
+
+# Requires a PREPARED self-hosted macOS runner (see docs/RUNNING.md §1):
+# Heidi installed + logged in, Accessibility + Screen Recording granted to the
+# runner, BlackHole 2ch installed, screen kept awake. Stock GitHub-hosted macOS
+# runners cannot satisfy these and will fail.
+
+on:
+  workflow_dispatch: {}        # manual "Run workflow" button
+  release:
+    types: [published]         # every published release
+  schedule:
+    - cron: "0 16 * * 1-5"     # weekdays 16:00 UTC (adjust/remove as needed)
+
+jobs:
+  e2e:
+    runs-on: [self-hosted, macos, macos-e2e]   # label your prepared Mac
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          python3 -m venv .venv
+          ./.venv/bin/pip install -e .
+
+      - name: Pre-flight (audio device present)
+        run: |
+          system_profiler SPAudioDataType | grep -i BlackHole
+          ./.venv/bin/python -c "from lib import audio; assert audio.blackhole_available(), 'BlackHole not available'"
+
+      - name: Run recording E2E (core, not long-session)
+        env:
+          TRANSCRIPT_MATCH_THRESHOLD: "0.9"
+        run: |
+          ./.venv/bin/python -m pytest tests/recording/ -v \
+            -m "not longsession" \
+            --html=reports/report.html --self-contained-html
+
+      - name: Upload report + media
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recording-e2e-report
+          path: reports/

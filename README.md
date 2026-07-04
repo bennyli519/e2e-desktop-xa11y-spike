@@ -9,6 +9,9 @@ Accessibility-tree-based desktop E2E tests for the Heidi macOS app, using
 
 ## Docs
 
+- [`docs/RUNNING.md`](docs/RUNNING.md) — **run guide for QA & CI**: what to
+  prepare (BlackHole, permissions, cloud Mac), how to trigger, how to read
+  reports, and how to wire CI / release triggers.
 - [`docs/DESIGN.md`](docs/DESIGN.md) — architecture, layering, selector strategy.
 - [`docs/SPEC_DRIVEN.md`](docs/SPEC_DRIVEN.md) — the two modes (dev verify / E2E
   bundle) and the write-spec-first → develop-until-green workflow.

@@ -68,23 +68,43 @@ class RecordingPage:
     def has_transcript_tab(self) -> bool:
         return self.app.locator(TRANSCRIPT_TAB).exists()
 
-    def note_text(self) -> str:
-        """Return all visible note/transcript body text, concatenated.
+    def open_tab(self, name: str) -> bool:
+        """Switch to a tab in the session view ('Transcript' / 'Note' / 'Context')."""
+        btn = self.app.locator(f"button[name='{name}']")
+        if btn.exists():
+            btn.press()
+            time.sleep(1.5)
+            return True
+        return False
 
-        The generated SOAP note is rendered as many `static_text` values
-        (Subjective / Objective / Assessment / Plan bullet points). There is no
-        single container with a stable id, so we gather the static_text values.
-        Skips obvious chrome (timers, single letters, boilerplate footer).
+    def _body_text(self) -> str:
+        """Concatenate visible body static_text, skipping chrome/sidebar.
+
+        Skips the session-list sidebar (dates, short titles), single letters,
+        timers, and the footer disclaimer.
         """
         parts: list[str] = []
         for e in self.app.locator("static_text").elements():
             v = (e.value or "").strip()
-            if len(v) < 4:                      # skip letters / mm:ss fragments
+            if len(v) < 15:                      # sidebar titles/dates/timers are short
                 continue
-            if "Medical knowledge only" in v:   # footer disclaimer
+            if "Medical knowledge only" in v:    # footer disclaimer
+                continue
+            if "Skip to" in v:                   # a11y skip links
                 continue
             parts.append(v)
         return "\n".join(parts)
+
+    def transcript_text(self) -> str:
+        """Verbatim transcript (Transcript tab). Near word-for-word audio."""
+        self.open_tab("Transcript")
+        return self._body_text()
+
+    def note_text(self) -> str:
+        """Generated SOAP note body (Note tab). Summarised/normalised content."""
+        # Note tab is the default post-generation view; only switch if present.
+        self.open_tab("Note")
+        return self._body_text()
 
     # --- actions ---
     def start_recording(self) -> None:
