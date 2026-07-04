@@ -145,14 +145,49 @@ See §5 for the workflow snippet that produces + publishes these.
 
 ## 4. Can this go in CI?
 
-**Not on stock GitHub-hosted macOS runners.** They can't (easily) grant the
-TCC **Screen Recording** permission non-interactively, have no audio loopback,
-and run the app without a real foreground display. Those are exactly what this
-suite needs.
+Two different answers depending on whether you need the **audio** path. Based
+on xa11y's official CI guide (https://xa11y.dev/guides/ci/):
 
-**Yes on a self-hosted / cloud Mac runner** that you prepare once (§1). That
-machine keeps the permissions, BlackHole, and a logged-in Heidi, so CI runs are
-just "pull + pytest".
+### The accessibility permission is NOT the blocker
+
+xa11y ships `xa11y/setup-a11y@v1` (GitHub Actions) and a standalone
+`grant_macos_tcc.sh`. On a **hosted** runner they grant the macOS
+**Accessibility (TCC)** permission non-interactively — writing the TCC db and
+restarting `tccd` (allowed because SIP only protects `/System`). So "reading
+the AX tree" works on hosted runners:
+
+- **Windows** — `windows-latest` needs **nothing**; UIA works out of the box.
+- **macOS** — `macos-latest` + `setup-a11y` (grant TCC to the python binary).
+- **Linux** — `ubuntu-latest` + `setup-a11y` (Xvfb + D-Bus + AT-SPI).
+
+So a **pure-UI** xa11y suite (navigation, buttons, text presence) **can run on
+stock GitHub-hosted runners.** Our earlier "not on hosted runners" claim was
+too broad — it only applies to the two extras below.
+
+### What still blocks THIS suite on hosted runners
+
+Our recording E2E needs two things the official CI setup does **not** cover:
+
+1. **Real audio input (BlackHole loopback).** Hosted runners have no virtual
+   audio device, and installing BlackHole needs sudo + a reboot. Without it
+   there's no mic signal → no transcript → nothing to assert.
+2. **Screen Recording permission** — only if you keep per-test video
+   (`RECORD_VIDEO=1`). `setup-a11y` grants **Accessibility**, not Screen
+   Recording. Set `RECORD_VIDEO=0` and this one goes away; xa11y's own
+   `screenshot()` for failure shots also depends on it, so drop that too or
+   run where it's granted.
+
+**Bottom line:**
+- **Pure-UI regression** → hosted runners are fine (`setup-a11y`).
+- **This recording/transcription E2E** → still needs a **self-hosted / cloud
+  Mac** for the audio loopback (and, if you keep video, Screen Recording). That
+  machine keeps BlackHole + a logged-in Heidi, so runs are just "pull + pytest".
+
+The accessibility grant on that self-hosted Mac can be automated too:
+```bash
+scripts/grant_macos_tcc.sh "$(.venv/bin/python -c 'import sys; print(sys.executable)')"
+```
+(grants Accessibility to the real interpreter binary — see xa11y's guide).
 
 ---
 
