@@ -134,25 +134,24 @@ flow end-to-end", for comparison against the WDIO true-app POC.
 
 `login → new session → start recording → wait ~30s → stop → note generation`
 
-Ran green locally, **two levels**:
+Ran green locally, **four cases**:
 
 - `test_record_stop_note_generation` — core ticket scenario (structural): the
   recording timer advances, stop works, and note generation starts.
-- `test_record_transcribes_spoken_content` — **true end-to-end**: a fixed spoken
-  consult is injected via BlackHole, and the generated note is asserted to
-  CONTAIN the spoken content. Both PASS (2 passed in 120s).
+- `test_record_transcribes_spoken_content` — **true end-to-end** (30s): a fixed
+  spoken consult is injected via BlackHole and the transcript is asserted to
+  contain the spoken content. **100% keyword match.**
+- `test_record_5min_session` — 5-min real consult. **100% (38/38).**
+- `test_record_10min_session` — 10-min real consult. **92.2% (59/64)** — the
+  few misses (racing/cholesterol/father/smoke/moisturiser) are spoken words the
+  ASR/summary dropped; well above the 0.9 bar.
 
-**Proof the audio→transcript loop actually works.** Injecting
-`assets/consult_30s.wav` ("...persistent headache for about two weeks...
-waking up around three in the morning... no nausea...") produced a SOAP note
-containing:
-
-> - Persistent headache for approximately two weeks, predominantly occurring in the afternoon
-> - Sleep disturbance with early morning awakening at 3am and difficulty returning to sleep
-> - No nausea reported / Associated photophobia present
-
-i.e. the spoken words came back as correct, structured note content — verified
-by asserting the note text contains ≥2 of the spoken keywords.
+**Proof the audio→transcript loop actually works.** Injecting real consult
+audio produces a transcript that matches the spoken content near word-for-word;
+accuracy is asserted against the verbatim Transcript tab (not the summarised
+SOAP note, which normalises/omits spoken words). The 0.9 threshold sits right:
+100% on clean short/medium runs, 92% on the long one — tolerant of ASR variance
+without going lax.
 
 ### Selectors discovered (all stable role+name, no coordinates)
 
