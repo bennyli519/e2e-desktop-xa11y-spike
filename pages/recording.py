@@ -33,6 +33,11 @@ GENERATING_MARKERS = [
 
 # A "Transcript" tab only appears once there is captured audio/transcript.
 TRANSCRIPT_TAB = "button[name='Transcript']"
+NOTE_TAB = "button[name='Note']"
+
+# Note generation completes when these markers disappear.
+GENERATION_DONE_ABSENT = ["button[name='Stop generating']",
+                          "static_text[value*='Analyzing transcript']"]
 
 
 class RecordingPage:
@@ -54,8 +59,32 @@ class RecordingPage:
     def note_generation_started(self) -> bool:
         return any(self.app.locator(sel).exists() for sel in GENERATING_MARKERS)
 
+    def note_generation_done(self) -> bool:
+        """True once the 'Stop generating' / 'Analyzing' markers are gone AND
+        some note body text is present (SOAP sections populated)."""
+        still_going = any(self.app.locator(s).exists() for s in GENERATION_DONE_ABSENT)
+        return (not still_going) and bool(self.note_text().strip())
+
     def has_transcript_tab(self) -> bool:
         return self.app.locator(TRANSCRIPT_TAB).exists()
+
+    def note_text(self) -> str:
+        """Return all visible note/transcript body text, concatenated.
+
+        The generated SOAP note is rendered as many `static_text` values
+        (Subjective / Objective / Assessment / Plan bullet points). There is no
+        single container with a stable id, so we gather the static_text values.
+        Skips obvious chrome (timers, single letters, boilerplate footer).
+        """
+        parts: list[str] = []
+        for e in self.app.locator("static_text").elements():
+            v = (e.value or "").strip()
+            if len(v) < 4:                      # skip letters / mm:ss fragments
+                continue
+            if "Medical knowledge only" in v:   # footer disclaimer
+                continue
+            parts.append(v)
+        return "\n".join(parts)
 
     # --- actions ---
     def start_recording(self) -> None:
@@ -89,4 +118,13 @@ class RecordingPage:
             if self.note_generation_started() or self.has_transcript_tab():
                 return True
             time.sleep(1)
+        return False
+
+    def wait_note_complete(self, timeout: float = 150.0) -> bool:
+        """Wait until note generation has finished and body text is present."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.note_generation_done():
+                return True
+            time.sleep(3)
         return False

@@ -92,6 +92,13 @@ the Page Object method once; specs are untouched.
    closes modals before each nav test.
 9. **Some text areas don't echo value via AX** (read `'\n'`) → assert `editable`/
    role instead of content.
+10. **Heidi window backgrounded → EMPTY AX tree.** A non-foreground WKWebView
+    stops publishing its AX tree (you get a 20-char stub). Keep Heidi frontmost;
+    the recording harness runs `osascript -e 'tell application "Heidi" to
+    activate'` before acting.
+11. **BlackHole device missing after install** → reload CoreAudio with
+    `sudo killall coreaudiod` (SIP blocks the non-sudo `launchctl kickstart`);
+    verify with `system_profiler SPAudioDataType | grep -i BlackHole`.
 
 ## How to work on this repo
 

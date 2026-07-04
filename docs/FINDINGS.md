@@ -134,10 +134,25 @@ flow end-to-end", for comparison against the WDIO true-app POC.
 
 `login → new session → start recording → wait ~30s → stop → note generation`
 
-Ran green locally: `tests/recording/test_record_note_generation.py::
-test_record_stop_note_generation PASSED (29.75s)`. The test asserts the
-recording timer actually advances (proving live capture, not a frozen UI),
-that stop takes effect, and that note generation is triggered.
+Ran green locally, **two levels**:
+
+- `test_record_stop_note_generation` — core ticket scenario (structural): the
+  recording timer advances, stop works, and note generation starts.
+- `test_record_transcribes_spoken_content` — **true end-to-end**: a fixed spoken
+  consult is injected via BlackHole, and the generated note is asserted to
+  CONTAIN the spoken content. Both PASS (2 passed in 120s).
+
+**Proof the audio→transcript loop actually works.** Injecting
+`assets/consult_30s.wav` ("...persistent headache for about two weeks...
+waking up around three in the morning... no nausea...") produced a SOAP note
+containing:
+
+> - Persistent headache for approximately two weeks, predominantly occurring in the afternoon
+> - Sleep disturbance with early morning awakening at 3am and difficulty returning to sleep
+> - No nausea reported / Associated photophobia present
+
+i.e. the spoken words came back as correct, structured note content — verified
+by asserting the note text contains ≥2 of the spoken keywords.
 
 ### Selectors discovered (all stable role+name, no coordinates)
 
@@ -196,10 +211,16 @@ isn't killed by the global 120s cap.
   from the control logic.
 - **Runtime:** ~30s for the 30s scenario (dominated by the recording wait
   itself), negligible framework overhead.
-- **Flake risk:** one real hazard — the AX tree momentarily collapses to a stub
-  during the new-session view transition (observed: 54-char tree). Mitigation:
-  poll `web_area` visible before dumping/acting; the Page Object's
-  `wait_visible` guards already cover this.
+- **Flake risk:** two real hazards found. (1) The AX tree momentarily collapses
+  to a stub during the new-session view transition (observed: 54-char tree) —
+  poll `web_area` visible before acting; the Page Object `wait_visible` guards
+  cover this. (2) **The AX tree is EMPTY whenever the Heidi window is not
+  foreground** (backgrounded WKWebView stops publishing AX) — the runner must
+  keep Heidi frontmost; the harness calls `osascript ... activate` before runs.
+- **BlackHole setup gotcha:** after `brew install blackhole-2ch` the device may
+  not appear until coreaudiod is reloaded — `sudo killall coreaudiod` (needs a
+  real terminal for the password; SIP blocks the non-sudo `launchctl kickstart`).
+  Verify with `system_profiler SPAudioDataType | grep -i BlackHole`.
 - **Debuggability:** stage dumps (`reports/rec_*.txt`) + per-test video +
   failure screenshots make it easy to see exactly where a run diverged.
 
