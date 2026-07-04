@@ -50,6 +50,16 @@ def _seconds() -> float:
     return float(os.environ.get("RECORD_SECONDS", "30"))
 
 
+def _match_threshold() -> float:
+    """Fraction of expected keywords that must appear in the note (0..1).
+
+    Transcription + LLM summarisation are non-deterministic, so we don't require
+    every word — just that accuracy clears a bar. Default 0.4 (40%); override
+    with TRANSCRIPT_MATCH_THRESHOLD.
+    """
+    return float(os.environ.get("TRANSCRIPT_MATCH_THRESHOLD", "0.4"))
+
+
 def test_record_stop_note_generation(fresh_session: RecordingPage, audio_injection):
     """Core ticket scenario: recording works, stop works, generation starts."""
     rec = fresh_session
@@ -97,10 +107,15 @@ def test_record_transcribes_spoken_content(
     note = rec.note_text().lower()
 
     hits = [w for w in EXPECTED_KEYWORDS if w in note]
-    assert len(hits) >= 2, (
-        "Generated note does not contain the spoken audio content. "
-        f"Expected >=2 of {EXPECTED_KEYWORDS}, found {hits}.\n"
+    accuracy = len(hits) / len(EXPECTED_KEYWORDS)
+    threshold = _match_threshold()
+    print(f"transcript accuracy: {accuracy:.0%} "
+          f"({len(hits)}/{len(EXPECTED_KEYWORDS)}) hits={hits} "
+          f"threshold={threshold:.0%} completed={completed}")
+
+    assert note.strip(), "Note body is empty"
+    assert accuracy >= threshold, (
+        f"Transcription accuracy {accuracy:.0%} below threshold {threshold:.0%}. "
+        f"Matched {hits} of {EXPECTED_KEYWORDS}.\n"
         f"Note text (first 500 chars):\n{note[:500]}"
     )
-    # completion is best-effort; content match is the real assertion
-    assert note.strip(), "Note body is empty"
