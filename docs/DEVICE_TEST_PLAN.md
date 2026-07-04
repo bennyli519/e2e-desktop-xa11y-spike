@@ -86,9 +86,12 @@ Old `tests/devices/` (6 tests) is migrated into `device-connection/` and removed
 
 ## Hard constraints (from source trace)
 
-1. **Remote recording has no app-side start/stop** — physical button only. Tests
-   verify the app's *reaction* (toasts, live indicator, session created); starting
-   the recording is a manual step (`needs_manual`).
+1. **Remote recording uses the same session controls.** The physical device
+   button and the in-app session controls (Transcribe / Pause transcribing /
+   End recording) are interchangeable once the device is connected. So the
+   remote-session test is **software-driven** (select 'Heidi Remote' input, then
+   start/pause/resume/stop via the session controls) — no manual button press.
+   Audio is the device mic (not BlackHole), so it asserts the FLOW, not content.
 2. **Bulk sync auto-triggers from Rust** — only `Retry sync` + transport switches
    are clickable. Tests verify progress UI while a real sync runs.
 3. **OTA needs a device with an available firmware update** — otherwise skip.

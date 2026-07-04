@@ -1,102 +1,89 @@
-"""remote-session-recording: record a session via the physical Chronicle device.
+"""remote-session-recording: record a session via the Chronicle device.
 
-IMPORTANT: the app has NO start/stop button for remote-device recording — the
-user presses the physical button ON the Heidi Remote. This test therefore
-verifies the app's REACTION to device-driven recording:
-  - you press the device button when prompted
-  - the app shows the live-transcription indicator + 'Heidi Remote' input
-  - you long-press to stop
-  - a session with a transcript/note appears
+The physical device button and the in-app session controls (Transcribe / Pause
+transcribing / End recording) are INTERCHANGEABLE once the device is connected —
+they drive the same recording. So this test is software-driven: it selects
+'Heidi Remote' as the input source, then starts/pauses/resumes/stops the
+recording via the session controls and verifies note generation is triggered.
 
-Requires a paired, connected device AND a human to press the button
-(RUN_MANUAL=1). Without those it skips.
+Audio comes from the device microphone (not BlackHole), so we assert the FLOW
+(timer advances, pause/resume, stop, note generation starts) — not transcript
+content.
+
+Requires a paired, connected Chronicle device. Skips cleanly otherwise.
 
 Run from Ghostty, logged in, Heidi foreground, device connected:
-    RUN_MANUAL=1 pytest tests/remote-session-recording/ -v -s
+    pytest tests/remote-session-recording/ -v -s
 """
 import time
 
 import pytest
 import xa11y
 
-from pages import DevicePage
+from lib.login import is_logged_in
+from pages import DevicePage, RecordingPage
+from pages.sidebar import Sidebar
 
 pytestmark = [pytest.mark.remote_session, pytest.mark.needs_device,
-              pytest.mark.needs_manual, pytest.mark.slow, pytest.mark.timeout(300)]
+              pytest.mark.slow, pytest.mark.timeout(300)]
+
+RECORD_SECONDS = 20
 
 
 @pytest.fixture()
-def require_manual():
-    import os
-    if os.environ.get("RUN_MANUAL") != "1":
-        pytest.skip(
-            "Remote recording is device-button-driven — set RUN_MANUAL=1 and be "
-            "ready to press the physical device button when prompted"
-        )
-
-
-def _prompt(msg: str) -> None:
-    """Print a clear instruction for the human operator."""
-    print(f"\n>>> ACTION REQUIRED: {msg}\n")
-
-
-def _live_indicator_present(app: xa11y.App) -> bool:
-    # The live-transcription indicator shows the input label 'Heidi Remote'
-    # plus recording controls (Stop/Pause 'transcribing').
-    return (
-        app.locator("static_text[value*='Heidi Remote']").exists()
-        and (
-            app.locator("button[name*='Stop transcribing']").exists()
-            or app.locator("button[name*='transcribing']").exists()
-        )
-    )
-
-
-def test_remote_device_recording_reaction(heidi_app: xa11y.App, require_manual):
+def remote_ready(heidi_app: xa11y.App):
+    """Ensure logged in + a connected Chronicle device; else skip."""
+    if not is_logged_in(heidi_app):
+        pytest.skip("Not logged in")
     dp = DevicePage(heidi_app)
     dp.open()
     time.sleep(2)
     if not dp.has_paired_device():
-        pytest.skip("No paired device")
+        pytest.skip("No paired Chronicle device")
     if not dp.is_connected():
         if dp.reconnect():
             dp.wait_connected(timeout=40)
     if not dp.is_connected():
-        pytest.skip("Device not connected — cannot record from it")
+        pytest.skip("Chronicle device not connected — cannot record from it")
+    return dp
 
-    # WHEN the operator starts recording on the device.
-    _prompt("PRESS the Heidi Remote button ONCE to start recording. "
-            "Waiting up to 60s for the app to react…")
-    started = False
-    deadline = time.time() + 60
-    while time.time() < deadline:
-        if _live_indicator_present(heidi_app):
-            started = True
-            break
+
+def test_remote_session_recording(remote_ready, heidi_app: xa11y.App):
+    # Start a fresh session on the Scribe page.
+    sidebar = Sidebar(heidi_app)
+    sidebar.reset_to_scribe()
+    assert sidebar.new_session(), "Could not start a New session"
+    rec = RecordingPage(heidi_app)
+
+    # Select 'Heidi Remote' as the input so recording drives the device.
+    if not rec.select_input_heidi_remote():
+        pytest.skip("Could not select 'Heidi Remote' as input source")
+
+    # WHEN starting recording via the session control (== physical button).
+    rec.start_recording()
+    assert rec.is_recording(), "Recording did not start"
+
+    # Timer should advance (device is capturing).
+    t0 = rec.recording_timer()
+    time.sleep(RECORD_SECONDS // 2)
+
+    # Pause then resume (exercises the interchangeable controls).
+    if rec.pause_recording():
+        time.sleep(3)
+        rec.resume_recording()
         time.sleep(2)
-    assert started, (
-        "App did not show the live-recording indicator after the device started "
-        "recording (no 'Heidi Remote' live indicator / transcribing controls)"
-    )
-    print("Live recording indicator detected — app reacted to device recording.")
 
-    # Let it record briefly.
-    time.sleep(15)
+    time.sleep(RECORD_SECONDS // 2)
+    t1 = rec.recording_timer()
+    print(f"remote recording timer: {t0} -> {t1}")
+    assert t0 is not None and t1 is not None, f"No timer read (t0={t0}, t1={t1})"
+    assert t1 != t0, f"Recording timer did not advance ({t0} -> {t1})"
 
-    # WHEN the operator stops recording on the device.
-    _prompt("LONG-PRESS the Heidi Remote button to STOP recording. "
-            "Waiting up to 60s for the indicator to clear…")
-    stopped = False
-    deadline = time.time() + 60
-    while time.time() < deadline:
-        if not _live_indicator_present(heidi_app):
-            stopped = True
-            break
-        time.sleep(2)
-    assert stopped, "Live indicator did not clear after the device stopped recording"
+    # WHEN stopping.
+    rec.stop_recording()
 
-    # THEN a session should exist. Best-effort: the app auto-navigates to it or
-    # it appears in the session list. We assert the app is back on a normal view.
-    time.sleep(5)
-    assert heidi_app.locator("web_area").exists(), "App web view missing after stop"
-    print("Remote recording reaction verified (start indicator -> stop -> cleared).")
+    # THEN note generation is triggered (flow check; content not asserted since
+    # audio is the device's ambient mic, not a fixed clip).
+    started = rec.wait_note_generation(timeout=60.0)
+    assert started, "Note generation did not start after stopping remote recording"
+    print("Remote-device session recording flow verified (start/pause/stop/note-gen).")

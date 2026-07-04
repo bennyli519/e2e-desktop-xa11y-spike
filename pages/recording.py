@@ -107,6 +107,46 @@ class RecordingPage:
         return self._body_text()
 
     # --- actions ---
+    def select_input_heidi_remote(self) -> bool:
+        """Select 'Heidi Remote' as the audio input source for the session.
+
+        The input-source trigger has testid v2-input-source-trigger (aria-label
+        'Audio input'); the dropdown lists 'Microphone' options including the
+        device row labelled 'Heidi Remote'. Once selected, recording via the
+        session transcribe/pause/stop controls drives the physical device
+        (physical button and these controls are interchangeable when connected).
+        """
+        trigger = self.app.locator(
+            "button[name='Audio input'], button[name*='input source']"
+        )
+        if not trigger.exists():
+            return False
+        trigger.press()
+        time.sleep(1)
+        row = self.app.locator("button[name*='Heidi Remote'], "
+                               "static_text[value='Heidi Remote']")
+        if row.exists():
+            row.press()
+            time.sleep(1)
+            return True
+        return False
+
+    def pause_recording(self) -> bool:
+        btn = self.app.locator(PAUSE_RECORDING)
+        if btn.exists():
+            btn.press()
+            return True
+        return False
+
+    def resume_recording(self) -> bool:
+        btn = self.app.locator(
+            "button[name*='Resume transcribing'], button[name='Resume']"
+        )
+        if btn.exists():
+            btn.press()
+            return True
+        return False
+
     def start_recording(self) -> None:
         btn = self.app.locator(START_RECORDING)
         btn.wait_visible(timeout=10.0)
