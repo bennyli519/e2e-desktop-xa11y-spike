@@ -1,9 +1,16 @@
 name: recording-e2e
 
-# Requires a PREPARED self-hosted macOS runner (see docs/RUNNING.md §1):
-# Heidi installed + logged in, Accessibility + Screen Recording granted to the
-# runner, BlackHole 2ch installed, screen kept awake. Stock GitHub-hosted macOS
-# runners cannot satisfy these and will fail.
+# Requires a PREPARED self-hosted macOS runner (see docs/RUNNING.md §1 and §7):
+# a real Mac (office Mac mini, or an AWS EC2 mac2.metal / cloud Mac) with:
+#   - Heidi installed + logged in (Auth0 token persists)
+#   - BlackHole 2ch installed (needs sudo + reboot — do once)
+#   - an auto-login GUI session kept awake (caffeinate) so the AX tree is live
+# Accessibility (TCC) is granted per-run below via grant_macos_tcc.sh, so you
+# don't have to click it. Screen Recording is avoided by RECORD_VIDEO=0.
+#
+# Stock GitHub-hosted macOS runners CANNOT run this (no audio loopback, can't
+# reboot to register BlackHole). Pure-UI xa11y suites can use hosted runners +
+# xa11y/setup-a11y instead — see docs/RUNNING.md §4.
 
 on:
   workflow_dispatch: {}        # manual "Run workflow" button
@@ -16,6 +23,9 @@ jobs:
   e2e:
     runs-on: [self-hosted, macos, macos-e2e]   # label your prepared Mac
     timeout-minutes: 60
+    env:
+      RECORD_VIDEO: "0"                 # skip screen video -> no Screen Recording perm needed
+      TRANSCRIPT_MATCH_THRESHOLD: "0.9"
     steps:
       - uses: actions/checkout@v4
 
@@ -24,14 +34,25 @@ jobs:
           python3 -m venv .venv
           ./.venv/bin/pip install -e .
 
-      - name: Pre-flight (audio device present)
+      - name: Grant Accessibility (TCC) to the interpreter
+        # xa11y's helper writes the TCC db + restarts tccd (SIP only guards
+        # /System, so this is allowed). Grants to the REAL on-disk binary.
+        run: |
+          PYBIN="$(./.venv/bin/python -c 'import sys; print(sys.executable)')"
+          if [ -x scripts/grant_macos_tcc.sh ]; then
+            scripts/grant_macos_tcc.sh "$PYBIN"
+          else
+            echo "grant_macos_tcc.sh not vendored; ensure TCC is granted on this runner"
+          fi
+
+      - name: Pre-flight (BlackHole present, Heidi logged in)
         run: |
           system_profiler SPAudioDataType | grep -i BlackHole
           ./.venv/bin/python -c "from lib import audio; assert audio.blackhole_available(), 'BlackHole not available'"
+          # keep the display awake for the duration so the AX tree stays live
+          caffeinate -dimsu -t 3600 &
 
       - name: Run recording E2E (core, not long-session)
-        env:
-          TRANSCRIPT_MATCH_THRESHOLD: "0.9"
         run: |
           ./.venv/bin/python -m pytest tests/recording/ -v \
             -m "not longsession" \

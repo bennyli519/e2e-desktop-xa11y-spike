@@ -52,11 +52,38 @@ Everything else is automated.
 
 - **No, for local/manual runs** — any Mac you can sit at works.
 - **Yes, for CI / scheduled runs** — you want a Mac that is *always on, always
-  logged in, permissions pre-granted*. Options:
-  - A dedicated **Mac mini** in the office (cheapest, most reliable).
-  - A **cloud Mac**: AWS EC2 `mac2` instances, MacStadium, Scaleway Apple
-    silicon, or Cirrus. Set it up once as described here, register it as a
-    self-hosted GitHub Actions runner.
+  logged in, BlackHole installed*. Options:
+  - A dedicated **Mac mini** in the office (cheapest for steady use; a ~$600
+    one-time buy often beats a long-running cloud Mac).
+  - A **cloud Mac**: AWS EC2 `mac2.metal` (Apple silicon), MacStadium,
+    Scaleway, or Cirrus.
+
+#### AWS EC2 Mac — the caveats that bite
+
+EC2 Mac is a fully real macOS box (root, kernel drivers, reboot) so it **can**
+run BlackHole — but note:
+
+- **24-hour minimum allocation.** EC2 Mac runs on a Dedicated Host with an
+  Apple-mandated 24h minimum before you can release it. You **cannot** spin one
+  up for 10 minutes and stop it. Cost is ~$0.65–1.0/hr, so a single allocation
+  is ~$16+, and a permanently-on runner is ~$500–650/month.
+- **No physical display.** It's headless bare metal. You must set up
+  **auto-login + a persistent GUI session** (e.g. via VNC / screen sharing)
+  or the AX tree comes back empty (the backgrounded-window pitfall). Keep it
+  awake with `caffeinate`.
+- **Audio is unverified on EC2.** BlackHole is a pure-software loopback so it
+  *should* work without a sound card, but that "headless EC2 Mac can capture
+  injected audio and transcribe it" path has **not been proven yet** — validate
+  it on one instance before committing to EC2 for CI.
+
+**Recommendation:** if runs are infrequent, an office Mac mini kept awake is
+simpler and cheaper. Use EC2 Mac when you want elastic/programmatic
+provisioning and can absorb the 24h-minimum cost model — and prove the audio
+path on it first.
+
+Once you have the machine (either option): run `bash scripts/bootstrap.sh`,
+install + log into Heidi, then register it as a self-hosted GitHub Actions
+runner (§5).
 
 ---
 
@@ -203,48 +230,11 @@ cp docs/ci/recording-e2e.yml.template .github/workflows/recording-e2e.yml
 git add .github/workflows/recording-e2e.yml   # needs a token with `workflow` scope
 ```
 
-The template (`docs/ci/recording-e2e.yml.template`):
-```yaml
-name: recording-e2e
-on:
-  workflow_dispatch:          # manual "Run workflow" button
-  release:
-    types: [published]        # every published release
-  schedule:
-    - cron: "0 16 * * 1-5"    # nightly-ish, weekdays 16:00 UTC
-
-jobs:
-  e2e:
-    runs-on: [self-hosted, macos, macos-e2e]   # your prepared Mac
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install deps
-        run: |
-          python3 -m venv .venv
-          ./.venv/bin/pip install -e .
-
-      - name: Ensure audio + Heidi ready
-        run: |
-          system_profiler SPAudioDataType | grep -i BlackHole
-          # (Heidi is pre-installed + logged in on this runner)
-
-      - name: Run recording E2E
-        env:
-          TRANSCRIPT_MATCH_THRESHOLD: "0.9"
-        run: |
-          ./.venv/bin/python -m pytest tests/recording/ -v \
-            -m "not longsession" \
-            --html=reports/report.html --self-contained-html
-
-      - name: Upload report + media
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: recording-e2e-report
-          path: reports/
-```
+The canonical template is **`docs/ci/recording-e2e.yml.template`** — it grants
+Accessibility per-run via `grant_macos_tcc.sh`, sets `RECORD_VIDEO=0` (so no
+Screen Recording permission is needed), keeps the display awake with
+`caffeinate`, and triggers on manual dispatch / release / schedule. Copy it in
+as shown above and edit the runner label / triggers to taste.
 
 Notes:
 - **Triggers covered:** manual (`workflow_dispatch`), **every release**
