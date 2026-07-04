@@ -29,6 +29,25 @@ results, and how to wire it into CI / release.
 Steps 3, 6, 7, 9 are automated by **`sh scripts/setup_audio.sh`** (it still
 needs your password for BlackHole and a reboot afterwards).
 
+### Fastest path: one-shot bootstrap
+
+`bash scripts/bootstrap.sh` does everything scriptable in one go:
+installs the Homebrew audio tooling, creates the venv + installs the package,
+generates all consult clips, reloads CoreAudio so BlackHole appears, and
+**opens the two System Settings panes** you must toggle by hand.
+
+```bash
+bash scripts/bootstrap.sh
+```
+
+What it CANNOT do (Apple TCC — no CLI path exists):
+- **Grant Accessibility / Screen Recording** — you must click the toggle in the
+  panes it opens, then **quit & reopen** the terminal. (For a fleet, push these
+  via an **MDM profile** instead of clicking.)
+- **Log in to Heidi** — do it once manually; the Auth0 token persists.
+
+Everything else is automated.
+
 ### Do I need a cloud host?
 
 - **No, for local/manual runs** — any Mac you can sit at works.
