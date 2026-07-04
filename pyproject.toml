@@ -36,6 +36,7 @@ markers = [
     "scribe: scribe page / note input",
     "devices: Chronicle device / BLE related tests",
     "recording: session recording + note generation (POC APP-7808)",
+    "longsession: multi-minute recording stress tests (5/10 min)",
     "slow: tests that take >10s",
 ]
 

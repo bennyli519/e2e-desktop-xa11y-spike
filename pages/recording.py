@@ -94,16 +94,27 @@ class RecordingPage:
         # Confirm we actually entered recording state.
         self.app.locator(END_RECORDING).wait_visible(timeout=10.0)
 
-    def wait_recording(self, seconds: float) -> None:
-        """Hold in recording state for `seconds`, polling the timer to prove
-        it is actually advancing (not a frozen UI)."""
-        start = self.recording_timer()
-        deadline = time.time() + seconds
-        while time.time() < deadline:
+    def wait_recording(self, seconds: float, sample_every: float = 30.0) -> list:
+        """Hold in recording state for `seconds`, sampling the timer so callers
+        can prove it keeps advancing across a long session (not frozen).
+
+        Returns a list of (elapsed_s, timer_value) samples including start/end.
+        """
+        samples: list = []
+        start = time.time()
+        samples.append((0.0, self.recording_timer()))
+        next_sample = sample_every
+        while True:
+            elapsed = time.time() - start
+            if elapsed >= seconds:
+                break
             time.sleep(2)
-        end = self.recording_timer()
-        # Best-effort liveness signal; callers assert on it if they want.
-        self._last_timer_delta = (start, end)
+            if elapsed >= next_sample:
+                samples.append((round(elapsed), self.recording_timer()))
+                next_sample += sample_every
+        samples.append((round(time.time() - start), self.recording_timer()))
+        self._last_samples = samples
+        return samples
 
     def stop_recording(self) -> None:
         btn = self.app.locator(END_RECORDING)
