@@ -94,10 +94,20 @@ class DevicePage:
         return self.app.locator("button[name*='Reconnecting']").exists()
 
     def connected_via(self) -> str | None:
-        for via in ("Connected via Bluetooth", "Connected via USB"):
-            el = self.app.locator(f"static_text[value*='{via}']")
-            if el.exists():
-                return via
+        """Transport shown under the status ('Bluetooth' / 'USB'). The label
+        'Connected via ' and the transport are separate sibling static_text
+        nodes, so scan for the label then read the next node."""
+        texts = [(e.value or "").strip() for e in
+                 self.app.locator("static_text").elements()]
+        for i, v in enumerate(texts):
+            if v.startswith("Connected via"):
+                # value may be in the same node ("Connected via Bluetooth") or next
+                tail = v.replace("Connected via", "").strip()
+                if tail:
+                    return tail
+                for nxt in texts[i + 1:i + 3]:
+                    if nxt in ("Bluetooth", "USB", "USB (Transfer mode)"):
+                        return nxt
         return None
 
     # --- device info reads --------------------------------------------------
@@ -105,10 +115,16 @@ class DevicePage:
         return self.app.locator("static_text[value*='Serial Number']").exists()
 
     def get_serial_number(self) -> str | None:
-        for el in self.app.locator("static_text").elements():
-            val = el.value or ""
-            if "Serial Number" in val and ":" in val:
-                return val.split(":", 1)[1].strip()
+        """Serial value. Label and value are SEPARATE sibling static_text nodes
+        ('Serial Number' then e.g. 'HV0_251106_000003'), so we scan for the label
+        and return the next value-looking node."""
+        texts = [(e.value or "").strip() for e in
+                 self.app.locator("static_text").elements()]
+        for i, v in enumerate(texts):
+            if v == "Serial Number":
+                for nxt in texts[i + 1:i + 4]:
+                    if nxt and nxt not in ("N/A",) and "Firmware" not in nxt:
+                        return nxt
         return None
 
     def has_firmware_version(self) -> bool:
