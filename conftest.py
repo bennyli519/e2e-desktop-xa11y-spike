@@ -8,6 +8,7 @@ process doesn't inherit the permission on macOS 26.
 import json
 import os
 import signal
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -18,29 +19,37 @@ import xa11y
 # ---------------------------------------------------------------------------
 # Config — how to find / launch the Heidi app
 # ---------------------------------------------------------------------------
-# DEFAULT (portable, zero-config): launch with `open -a Heidi` and attach with
-# App.by_name("Heidi"). This works on any machine that has Heidi installed,
-# wherever it lives — no hard-coded paths. Good for ~everyone.
+# DEFAULT (portable, zero-config):
+#   - macOS: launch with `open -a Heidi` and attach with App.by_name("Heidi").
+#   - Windows: find Heidi.exe in common install locations, launch it, then
+#     attach to the process that owns the main window.
 #
 # OPTIONAL overrides (env vars), in priority order:
 #   HEIDI_PID=1234         attach to one exact running process (most explicit)
 #   HEIDI_DEV=1            attach to the `pnpm tauri:dev` debug binary
 #                          (attach-only; you start it yourself). Path comes from
 #                          SCRIBE_FE_PATH (default ~/Desktop/heidi/scribe-fe-v2).
-#   HEIDI_APP_PATH=/x.app  launch that specific .app bundle by path — use this
-#                          when you have MULTIPLE same-named Heidi builds on one
-#                          machine and need to disambiguate.
+#   HEIDI_APP_PATH=/x.app  launch that specific .app bundle or .exe by path.
+#   HEIDI_EXE_PATH=C:\x\Heidi.exe
+#                          Windows alias for HEIDI_APP_PATH.
+#                          Use these when you have MULTIPLE same-named Heidi
+#                          builds on one machine and need to disambiguate.
 #   HEIDI_APP_NAME=Heidi   the AX/app name used for `open -a` and by_name.
 #
 # Most people set NOTHING and the default just works.
+IS_WINDOWS = os.name == "nt"
 APP_NAME = os.environ.get("HEIDI_APP_NAME", "Heidi")
 HEIDI_PID = os.environ.get("HEIDI_PID")
 HEIDI_DEV = os.environ.get("HEIDI_DEV") == "1"
-HEIDI_APP_PATH = os.environ.get("HEIDI_APP_PATH")  # absolute path to a .app
+HEIDI_APP_PATH = os.environ.get("HEIDI_APP_PATH") or os.environ.get("HEIDI_EXE_PATH")
 SCRIBE_FE = os.environ.get(
     "SCRIBE_FE_PATH", str(Path.home() / "Desktop" / "heidi" / "scribe-fe-v2")
 )
-DEV_BIN = os.environ.get("HEIDI_DEV_BIN", f"{SCRIBE_FE}/src-tauri/target/debug/app")
+_DEV_BIN_NAME = "app.exe" if IS_WINDOWS else "app"
+DEV_BIN = os.environ.get(
+    "HEIDI_DEV_BIN",
+    str(Path(SCRIBE_FE) / "src-tauri" / "target" / "debug" / _DEV_BIN_NAME),
+)
 
 STARTUP_TIMEOUT = float(os.environ.get("HEIDI_STARTUP_TIMEOUT", "30"))
 DEFAULT_TIMEOUT = float(os.environ.get("XA11Y_DEFAULT_TIMEOUT", "10"))
@@ -85,6 +94,148 @@ def _pid_for_exe(exe_match: str) -> int | None:
     return min(pids) if pids else None
 
 
+def _windows_ps(script: str, extra_env: dict[str, str] | None = None) -> list[str]:
+    """Run a tiny PowerShell query and return non-empty output lines."""
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
+    try:
+        out = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            env=env,
+        ).stdout
+    except Exception:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def _windows_main_pid_for_exe(exe_path: str) -> int | None:
+    """Return the running process PID for this exe that owns a main window."""
+    script = r"""
+    $target = [System.IO.Path]::GetFullPath($env:HEIDI_EXE_PATH).ToLowerInvariant()
+    Get-Process -ErrorAction SilentlyContinue |
+      Where-Object {
+        $_.Path -and
+        ([System.IO.Path]::GetFullPath($_.Path).ToLowerInvariant() -eq $target) -and
+        $_.MainWindowHandle -ne 0
+      } |
+      Sort-Object Id |
+      Select-Object -First 1 -ExpandProperty Id
+    """
+    for line in _windows_ps(script, {"HEIDI_EXE_PATH": str(Path(exe_path))}):
+        if line.isdigit():
+            return int(line)
+    return None
+
+
+def _windows_main_pid_for_name(process_name: str) -> int | None:
+    """Return the PID for a running app by process name, excluding helpers."""
+    name = Path(process_name).stem
+    script = r"""
+    Get-Process -Name $env:HEIDI_PROCESS_NAME -ErrorAction SilentlyContinue |
+      Where-Object { $_.MainWindowHandle -ne 0 } |
+      Sort-Object Id |
+      Select-Object -First 1 -ExpandProperty Id
+    """
+    for line in _windows_ps(script, {"HEIDI_PROCESS_NAME": name}):
+        if line.isdigit():
+            return int(line)
+    return None
+
+
+def _windows_find_heidi_exe() -> str | None:
+    """Find a standard Heidi Windows install without hard-coding one machine."""
+    if HEIDI_APP_PATH:
+        path = Path(HEIDI_APP_PATH).expanduser()
+        if not path.exists() or not path.is_file():
+            raise RuntimeError(
+                f"Configured Heidi path does not exist: {path}. "
+                "Set HEIDI_APP_PATH or HEIDI_EXE_PATH to the full Heidi.exe path."
+            )
+        return str(path)
+
+    exe_names = []
+    app_stem = Path(APP_NAME).stem
+    if app_stem:
+        exe_names.append(f"{app_stem}.exe")
+    if "Heidi.exe" not in exe_names:
+        exe_names.append("Heidi.exe")
+
+    roots = [
+        os.environ.get("LOCALAPPDATA"),
+        str(Path(os.environ["LOCALAPPDATA"]) / "Programs")
+        if os.environ.get("LOCALAPPDATA")
+        else None,
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+    ]
+    candidates: list[Path] = []
+    for root in [Path(r) for r in roots if r]:
+        for exe_name in exe_names:
+            stem = Path(exe_name).stem
+            candidates.extend(
+                [
+                    root / stem / exe_name,
+                    root / "Heidi" / exe_name,
+                ]
+            )
+
+    for exe_name in exe_names:
+        found = shutil.which(exe_name)
+        if found:
+            candidates.append(Path(found))
+
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return str(path)
+    return None
+
+
+def _windows_launch_or_attach() -> xa11y.App:
+    """Launch/attach Heidi on Windows and return an App handle."""
+    if HEIDI_DEV:
+        pid = _windows_main_pid_for_exe(DEV_BIN)
+        if pid is None:
+            raise RuntimeError(
+                f"HEIDI_DEV=1 but no windowed process matched {DEV_BIN!r}. "
+                f"Start it first:\n  cd {SCRIBE_FE} && pnpm tauri:dev"
+            )
+        return _attach_ready(xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT))
+
+    app_path = _windows_find_heidi_exe()
+    if app_path:
+        pid = _windows_main_pid_for_exe(app_path)
+        if pid is None:
+            subprocess.Popen(
+                [app_path],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            deadline = time.time() + STARTUP_TIMEOUT
+            while time.time() < deadline and pid is None:
+                time.sleep(1)
+                pid = _windows_main_pid_for_exe(app_path)
+        if pid is None:
+            raise RuntimeError(
+                f"Launched {app_path!r} but no main Heidi window appeared within "
+                f"{STARTUP_TIMEOUT}s"
+            )
+        return _attach_ready(xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT))
+
+    pid = _windows_main_pid_for_name(APP_NAME)
+    if pid is None:
+        raise RuntimeError(
+            "Could not find Heidi on Windows. Install Heidi in the default "
+            "location, add Heidi.exe to PATH, or set HEIDI_APP_PATH/"
+            "HEIDI_EXE_PATH to the full Heidi.exe path."
+        )
+    return _attach_ready(xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT))
+
+
 def _attach_ready(app: xa11y.App) -> xa11y.App:
     """Wait until the web_area is rendered, then return the app."""
     app.locator("web_area").wait_visible(timeout=STARTUP_TIMEOUT)
@@ -102,6 +253,9 @@ def heidi_app() -> xa11y.App:
     # 1. Explicit PID — attach to exactly that process.
     if HEIDI_PID:
         return _attach_ready(xa11y.App.by_pid(int(HEIDI_PID), timeout=STARTUP_TIMEOUT))
+
+    if IS_WINDOWS:
+        return _windows_launch_or_attach()
 
     # 2. Dev binary (pnpm tauri:dev) — attach only, never launched here.
     if HEIDI_DEV:
@@ -167,7 +321,7 @@ def dump_tree(heidi_app: xa11y.App):
 
     def _dump(label: str, max_depth: int = 12):
         path = reports / f"{label}.txt"
-        path.write_text(heidi_app.dump(max_depth=max_depth))
+        path.write_text(heidi_app.dump(max_depth=max_depth), encoding="utf-8")
         return path
 
     return _dump
@@ -179,7 +333,8 @@ def dump_tree(heidi_app: xa11y.App):
 ARTIFACTS = Path(__file__).resolve().parent / "reports" / "artifacts"
 
 # Toggle recording with RECORD_VIDEO=0 to skip (faster local runs).
-RECORD_VIDEO = os.environ.get("RECORD_VIDEO", "1") != "0"
+_DEFAULT_RECORD_VIDEO = "0" if IS_WINDOWS else "1"
+RECORD_VIDEO = os.environ.get("RECORD_VIDEO", _DEFAULT_RECORD_VIDEO) != "0"
 
 
 def _safe_name(nodeid: str) -> str:

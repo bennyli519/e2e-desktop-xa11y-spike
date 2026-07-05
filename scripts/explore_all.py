@@ -23,7 +23,7 @@ def dump(app, label, max_depth=14):
         tree = app.dump(max_depth=max_depth)
     except Exception as e:
         tree = f"<dump failed: {e}>"
-    path.write_text(tree)
+    path.write_text(tree, encoding="utf-8")
     print(f"  saved {label}: {len(tree)} chars -> {path.name}")
     return tree
 

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Desktop E2E tests for Heidi using xa11y accessibility library"
 requires-python = ">=3.11"
 dependencies = [
+    "miniaudio>=1.71; sys_platform == 'win32'",
     "xa11y>=0.9.0",
     "pytest>=9.0",
     "pytest-html>=4.0",
@@ -36,6 +37,7 @@ markers = [
     "scribe: scribe page / note input",
     "devices: Chronicle device / BLE related tests",
     "slow: tests that take >10s",
+    "long: intentionally long-running tests",
 ]
 
 [tool.ruff]

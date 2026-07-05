@@ -41,6 +41,10 @@ class DevicePage:
             time.sleep(1)
             return
 
+        if click_first_match(self.app, ["button[name='Try Again']"]):
+            time.sleep(3)
+            return
+
         if self.app.locator(
             "static_text[value*=\"Can't find your Heidi Remote\"]"
         ).exists():
@@ -48,7 +52,10 @@ class DevicePage:
             time.sleep(3)
             return
 
-        if self.app.locator("button[name='Close']").exists():
+        if (
+            self.app.locator("dialog").exists()
+            and self.app.locator("button[name='Close']").exists()
+        ):
             click_first_match(self.app, ["button[name='Close']"])
             time.sleep(0.8)
             return
@@ -68,11 +75,17 @@ class DevicePage:
         ).exists()
 
     def has_device_card(self) -> bool:
-        return self.app.locator("static_text[value*='Serial number']").exists()
+        return self.app.locator(
+            "static_text[value*='Serial number'], "
+            "static_text[name*='Serial number']"
+        ).exists()
 
     def get_serial_number(self) -> str | None:
-        for el in self.app.locator("static_text[value*='Serial number']").elements():
-            val = el.value or ""
+        for el in self.app.locator(
+            "static_text[value*='Serial number'], "
+            "static_text[name*='Serial number']"
+        ).elements():
+            val = el.value or el.name or ""
             if "Serial number" in val:
                 parts = val.split(":", 1)
                 if len(parts) == 2:
@@ -80,10 +93,15 @@ class DevicePage:
         return None
 
     def has_firmware_version(self) -> bool:
-        return self.app.locator("static_text[value*='Firmware version']").exists()
+        return self.app.locator(
+            "static_text[value*='Firmware version'], "
+            "static_text[name*='Firmware version']"
+        ).exists()
 
     def has_battery(self) -> bool:
-        return self.app.locator("static_text[value*='Battery']").exists()
+        return self.app.locator(
+            "static_text[value*='Battery'], static_text[name*='Battery']"
+        ).exists()
 
     # --- actions ---
     def reconnect(self) -> bool:

@@ -98,6 +98,12 @@ RECORD_VIDEO=0 pytest                      # skip screen recording (faster)
 (LaunchServices finds it wherever it's installed — no hard-coded paths) and
 attaches by name. On any machine with Heidi installed, just run `pytest`.
 
+On **Windows**, the default path is also zero-config for standard installs: the
+suite finds `Heidi.exe` in common install locations such as
+`%LOCALAPPDATA%\Heidi\Heidi.exe`, launches it if needed, and attaches to the
+process that owns the main window. Screen recording is disabled by default on
+Windows because the bundled recorder is macOS-only.
+
 Override only for special cases, via env vars (priority order):
 
 ```bash
@@ -105,15 +111,88 @@ pytest                                  # default: open -a Heidi + attach by nam
 HEIDI_DEV=1 pytest                      # attach to a running `pnpm tauri:dev` build
 HEIDI_PID=16215 pytest                  # attach to one exact running process
 HEIDI_APP_PATH="/Applications/Heidi Prod 2.2.0.app" pytest   # a specific .app
+HEIDI_EXE_PATH="C:\Users\you\AppData\Local\Heidi\Heidi.exe" pytest  # Windows
 HEIDI_APP_NAME="Heidi(Staging)" pytest  # different app/AX name for open -a + by_name
 ```
+
+PowerShell example for a non-standard Windows install:
+
+```powershell
+$env:HEIDI_EXE_PATH = "C:\Users\you\AppData\Local\Heidi\Heidi.exe"
+.\.venv\Scripts\python.exe -m pytest
+```
+
+### Recording smoke with a virtual audio device
+
+Desktop recording uses the real Tauri audio stack, not Playwright's
+`navigator.mediaDevices.getUserMedia` mock. To run the recording smoke against
+a virtual input device, configure the device name exactly as Heidi shows it:
+
+```bash
+HEIDI_E2E_RECORDING_INPUT_DEVICE="BlackHole 2ch" pytest tests/scribe/test_recording.py -v -s
+```
+
+On Windows, use the equivalent virtual cable device name instead. The test can
+also start an audio fixture while recording:
+
+```powershell
+$env:HEIDI_E2E_RECORDING_INPUT_DEVICE = "CABLE Output (VB-Audio Virtual Cable)"
+$env:HEIDI_E2E_AUDIO_PLAYBACK_DEVICE = "CABLE Input"
+$env:HEIDI_E2E_AUDIO_FIXTURE = "C:\path\to\sample.wav"
+.\.venv\Scripts\python.exe -m pytest tests\scribe\test_recording.py -v -s
+```
+
+VB-CABLE setup:
+
+1. Install **VB-Audio VB-CABLE** from https://vb-audio.com/Cable/.
+2. Run the installer as Administrator and reboot if Windows asks.
+3. Confirm Windows has a recording endpoint named
+   `CABLE Output (VB-Audio Virtual Cable)`.
+4. Route the fixture/player output to a playback endpoint such as
+   `CABLE Input (VB-Audio Virtual Cable)` or `CABLE In 16ch (...)`.
+5. Set `HEIDI_E2E_RECORDING_INPUT_DEVICE` to the recording endpoint name above.
+   Do not select `CABLE Input`/`CABLE In` in Heidi; those are playback outputs.
+
+To inspect the device names available to the test runner:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_audio_devices.py
+```
+
+For non-WAV fixtures or custom routing, set `HEIDI_E2E_AUDIO_PLAY_CMD` with
+`{file}` as the placeholder for the fixture path.
+
+Short and long note-generation runs mirror the web/macOS recording specs:
+
+```powershell
+$env:HEIDI_E2E_RECORDING_INPUT_DEVICE = "CABLE Output (VB-Audio Virtual Cable)"
+$env:HEIDI_E2E_AUDIO_PLAYBACK_DEVICE = "CABLE Input"
+
+# Short transcribe recording: records test.wav for 45s, then verifies transcript + note content.
+.\.venv\Scripts\python.exe -m pytest `
+  tests\scribe\test_recording.py::test_transcribe_short_audio_generates_note -v -s
+
+# Short dictation recording: records test.wav for 45s, then verifies transcript + note content.
+.\.venv\Scripts\python.exe -m pytest `
+  tests\scribe\test_recording.py::test_dictate_short_audio_generates_note -v -s
+
+# Long recording: records longscribe.mp3 in real time (~25 min), then verifies note.
+$env:HEIDI_E2E_RUN_LONG_RECORDING = "1"
+.\.venv\Scripts\python.exe -m pytest `
+  tests\scribe\test_recording.py::test_transcribe_long_audio_generates_note -v -s
+```
+
+Fixture lookup defaults to a sibling `scribe-fe-v2/packages/e2e-utils/test-files`
+checkout. Override with `HEIDI_E2E_FIXTURE_ROOT`,
+`HEIDI_E2E_SHORT_AUDIO_FIXTURE`, `HEIDI_E2E_DICTATION_AUDIO_FIXTURE`, or
+`HEIDI_E2E_LONG_AUDIO_FIXTURE`.
 
 - **`HEIDI_DEV=1`** — for local dev. Start `pnpm tauri:dev` yourself first; the
   suite only attaches (never launches it). Binary path defaults to
   `~/Desktop/heidi/scribe-fe-v2/src-tauri/target/debug/app`, override with
   `SCRIBE_FE_PATH` or `HEIDI_DEV_BIN`.
-- **`HEIDI_APP_PATH`** — only needed when you have MULTIPLE same-named Heidi
-  builds on one machine and must disambiguate by path.
+- **`HEIDI_APP_PATH` / `HEIDI_EXE_PATH`** — only needed when you have MULTIPLE
+  same-named Heidi builds on one machine and must disambiguate by path.
 
 **Testing your local dev build** (`pnpm tauri:dev`):
 

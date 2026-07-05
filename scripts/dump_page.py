@@ -65,7 +65,7 @@ def main():
     reports.mkdir(exist_ok=True)
     label = args.page or "current"
     out = reports / f"{label}_tree.txt"
-    out.write_text(tree)
+    out.write_text(tree, encoding="utf-8")
     print(f"\nSaved to {out}")
 
 
