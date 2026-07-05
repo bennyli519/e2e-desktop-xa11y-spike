@@ -3,6 +3,22 @@
 Reorganise device tests into **one flow per file**, grouped by feature folder.
 Flows and UI labels traced from `scribe-fe-v2` source (`src/features/chronicle/`).
 
+## Verified on real hardware (HV0_251106_000003, fw 4.6.0)
+
+| Flow | Status |
+|---|---|
+| first-onboarding (remove → scan → connect → setup) | ✅ PASSED |
+| connected-reconnect (→ Reconnect → state info) | ✅ PASSED |
+| reconnect-stress ×10 | ✅ PASSED (100%) |
+| startup-autoconnect (quit → reopen → auto-connect) | ✅ PASSED |
+| remote-lost ("I've lost my device" → removed) | ✅ PASSED |
+| remote-session-recording | ⏭️ skip — input-source trigger has no AX name (needs aria-label) |
+| ota-upgrade | needs a device with a pending firmware update |
+| bulk-sync | needs pending offline recordings on the device |
+
+Run from Ghostty with Heidi paired + frontmost on the ACTIVE Space; don't switch
+away mid-run. Destructive flows need `RUN_MANUAL=1`.
+
 ## Structure
 
 ```
