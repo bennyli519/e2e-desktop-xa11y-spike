@@ -41,6 +41,7 @@ def test_first_onboarding_flow(devices: DevicePage, require_device, require_manu
         assert devices.remove_confirm(), "Could not confirm removal"
 
     assert devices.wait_remove_success(timeout=90), "Device removal did not complete"
+    # Success screen (if shown) has a Dismiss; otherwise we're already on the card.
     devices.remove_dismiss()
     time.sleep(2)
 
@@ -53,47 +54,35 @@ def test_first_onboarding_flow(devices: DevicePage, require_device, require_manu
     if not devices.onboarding_is_scanning():
         pytest.skip("Onboarding did not reach the scan step (prerequisite/permission gate?)")
 
-    # Wait for a device to appear, then pick it. Requires the physical device on.
+    # Wait for THIS device to appear in the scan list, then pick it.
     print(">> Make sure the Heidi Remote is ON (press its side button).")
+    device_serial = "HV0"  # discovered rows are named 'heidi remote device HV0_...'
     picked = False
     deadline = time.time() + 60
     while time.time() < deadline:
-        # device rows are Button nodes named by the device name; try a broad grab
-        rows = devices.app.locator("button").elements()
-        for r in rows:
-            name = (r.name or "")
-            if name and name not in (
-                "Search again", "Don't see your device?", "Back", "Close",
-            ) and "Heidi" not in name and len(name) > 2:
-                # heuristic: a discovered device row
-                try:
-                    r.press()
-                    picked = True
-                    break
-                except Exception:
-                    continue
-        if picked:
+        row = devices.app.locator(f"button[name*='{device_serial}']")
+        if row.exists():
+            row.press()
+            picked = True
             break
         time.sleep(3)
     if not picked:
         pytest.skip("No device discovered during scan — is the device on and nearby?")
 
-    # WHEN connecting completes.
+    # WHEN connecting completes (a fresh re-pair over BLE can be slow).
     time.sleep(4)
-    if not devices.onboarding_is_connected():
-        # connecting can take a while over BLE
-        for _ in range(20):
-            if devices.onboarding_is_connected():
-                break
-            time.sleep(2)
+    for _ in range(40):
+        if devices.onboarding_is_connected():
+            break
+        time.sleep(2)
     assert devices.onboarding_is_connected(), "Did not reach 'Successfully connected'"
 
-    # THEN set up the default note (template).
+    # THEN run the setup wizard (default note -> language -> basics -> USB modal).
     assert devices.onboarding_setup_device(), "Could not click 'Setup my device'"
     time.sleep(2)
-    if devices.setup_is_default_note_step():
-        assert devices.setup_select_default_note(), "Could not confirm default note"
-        time.sleep(2)
+    devices.complete_onboarding_setup()
 
-    # Onboarding done — verify we now have a paired, connected device.
+    # Onboarding done — verify we now have a paired device.
+    devices.open()
+    time.sleep(3)
     assert devices.has_paired_device(), "Device not paired after onboarding"

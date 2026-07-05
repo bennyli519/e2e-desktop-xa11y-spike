@@ -213,6 +213,24 @@ class DevicePage:
             "static_text[value*='Select your default note']"
         ).exists()
 
+    def complete_onboarding_setup(self, max_steps: int = 10) -> None:
+        """Walk the post-connect setup wizard + Onboarding Basics + USB modal to
+        the end. Verified real flow: Confirm (default note) -> Confirm (language)
+        -> Onboarding Basics (Next x3 -> Done) -> Enable USB-C syncing (Dismiss).
+        Clicks whatever advance button is present each step until none remain.
+        """
+        import time as _t
+        for _ in range(max_steps):
+            for label in ("Confirm", "Skip", "Next", "Done",
+                          "Maybe later", "Dismiss"):
+                btn = self.app.locator(f"button[name='{label}']")
+                if btn.exists():
+                    btn.press()
+                    _t.sleep(2.5)
+                    break
+            else:
+                break  # no advance button -> wizard finished
+
     # --- remove / lost device ----------------------------------------------
     def click_remove_device(self) -> bool:
         """Open the Remove device dialog from the card."""
@@ -258,9 +276,11 @@ class DevicePage:
         return click_first_match(self.app, ["button[name='Dismiss']"])
 
     def wait_remove_success(self, timeout: float = 60.0) -> bool:
+        """Removal is done when either the success screen shows OR the page has
+        reverted to the initial pairing card (device unlinked)."""
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if self.remove_succeeded():
+            if self.remove_succeeded() or self.has_initial_pairing_card():
                 return True
             time.sleep(1)
         return False

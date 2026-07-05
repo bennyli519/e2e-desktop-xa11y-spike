@@ -56,8 +56,17 @@ def test_remote_session_recording(remote_ready, heidi_app: xa11y.App):
     rec = RecordingPage(heidi_app)
 
     # Select 'Heidi Remote' as the input so recording drives the device.
+    # NOTE: the input-source trigger is an ICON-ONLY button with no accessible
+    # name in the AX tree (verified on real hardware), so it can't be reliably
+    # selected by text yet. Until scribe-fe-v2 adds an aria-label to the
+    # v2-input-source-trigger, this flow can't guarantee it records via the
+    # device rather than the built-in mic — skip with a clear reason.
     if not rec.select_input_heidi_remote():
-        pytest.skip("Could not select 'Heidi Remote' as input source")
+        pytest.skip(
+            "Cannot select 'Heidi Remote' input — the input-source trigger is an "
+            "icon-only button with no AX name. Needs an aria-label in scribe-fe-v2 "
+            "(follow-up PR) to drive remote-device recording deterministically."
+        )
 
     # WHEN starting recording via the session control (== physical button).
     rec.start_recording()
