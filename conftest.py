@@ -9,6 +9,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -131,21 +132,22 @@ def heidi_app() -> xa11y.App:
                 )
         return _attach_ready(xa11y.App.by_pid(pid, timeout=STARTUP_TIMEOUT))
 
-    # 4. DEFAULT (portable): launch by name via LaunchServices, attach by name.
+    # 4. DEFAULT (portable): launch by name, attach by name. Cross-platform:
+    #    macOS uses `open -a`, Windows uses Start-Process (see lib.launch_app).
     try:
         app = xa11y.App.by_name(APP_NAME, timeout=3.0)
     except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
-        # Not running — `open -a` resolves the app wherever it's installed.
-        result = subprocess.run(
-            ["open", "-a", APP_NAME], capture_output=True, text=True
-        )
-        if result.returncode != 0:
+        # Not running — launch it, then attach by name.
+        from lib import launch_app
+        launch_app(APP_NAME)
+        try:
+            app = xa11y.App.by_name(APP_NAME, timeout=STARTUP_TIMEOUT)
+        except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
             raise RuntimeError(
-                f"Could not launch {APP_NAME!r} with `open -a` "
-                f"({result.stderr.strip()}). Is it installed? "
-                f"Set HEIDI_APP_PATH to an explicit .app, or HEIDI_APP_NAME."
+                f"Could not launch/attach {APP_NAME!r}. Is Heidi installed and "
+                f"(ideally) already running? Set HEIDI_APP_PATH to an explicit "
+                f".app (macOS), or HEIDI_APP_NAME to match the app/window name."
             )
-        app = xa11y.App.by_name(APP_NAME, timeout=STARTUP_TIMEOUT)
     return _attach_ready(app)
 
 
@@ -203,6 +205,12 @@ def record_test(request):
     - Set RECORD_VIDEO=0 to disable.
     """
     if not RECORD_VIDEO:
+        yield
+        return
+
+    # Screen video uses macOS `screencapture`. On other platforms skip recording
+    # (the tests still run; you just don't get per-test video).
+    if sys.platform != "darwin":
         yield
         return
 

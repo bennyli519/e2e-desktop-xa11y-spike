@@ -9,20 +9,19 @@ Route: /devices. Page header 'Heidi Remote'. DeviceSection branches:
   paired    -> DeviceCard + HelpSupportCard + RemoveDeviceCard
   not paired -> InitialPairingCard
 """
-import subprocess
 import time
 
 import xa11y
 
-from lib import click_first_match
+from lib import activate_app, click_first_match
 from pages.sidebar import Sidebar
 
 
 def _activate_heidi() -> None:
-    """Bring Heidi to the foreground. A backgrounded WKWebView stops publishing
-    its AX tree, so long device flows must keep Heidi frontmost between steps."""
-    subprocess.run(["osascript", "-e", 'tell application "Heidi" to activate'],
-                   capture_output=True)
+    """Bring Heidi to the foreground. A backgrounded WKWebView (macOS) blanks its
+    AX tree, so long device flows must keep Heidi frontmost between steps. On
+    Windows UIA this is a harmless best-effort nicety."""
+    activate_app("Heidi")
 
 
 class DevicePage:

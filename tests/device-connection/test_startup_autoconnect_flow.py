@@ -12,12 +12,12 @@ to the new process. Login must persist (Auth0 token) across the relaunch.
 Run from Ghostty, logged in, Heidi foreground, device on:
     pytest tests/device-connection/test_startup_autoconnect_flow.py -v -s
 """
-import subprocess
 import time
 
 import pytest
 import xa11y
 
+from lib import activate_app, launch_app, quit_app
 from lib.login import is_logged_in
 from pages import DevicePage
 
@@ -26,10 +26,9 @@ pytestmark = [pytest.mark.device_connection, pytest.mark.needs_device,
 
 
 def _relaunch_heidi(app_name: str = "Heidi") -> None:
-    subprocess.run(["osascript", "-e", f'quit app "{app_name}"'],
-                   capture_output=True)
+    quit_app(app_name)
     time.sleep(5)
-    subprocess.run(["open", "-a", app_name], capture_output=True)
+    launch_app(app_name)
     time.sleep(10)
 
 
@@ -45,8 +44,7 @@ def test_startup_autoconnect(heidi_app: xa11y.App, request):
     _relaunch_heidi()
 
     # Re-attach to the new process and bring it foreground.
-    subprocess.run(["osascript", "-e", 'tell application "Heidi" to activate'],
-                   capture_output=True)
+    activate_app("Heidi")
     time.sleep(2)
     app = xa11y.App.by_name("Heidi", timeout=30)
     app.locator("web_area").wait_visible(timeout=30)
