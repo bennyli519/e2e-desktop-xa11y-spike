@@ -9,12 +9,20 @@ Route: /devices. Page header 'Heidi Remote'. DeviceSection branches:
   paired    -> DeviceCard + HelpSupportCard + RemoveDeviceCard
   not paired -> InitialPairingCard
 """
+import subprocess
 import time
 
 import xa11y
 
 from lib import click_first_match
 from pages.sidebar import Sidebar
+
+
+def _activate_heidi() -> None:
+    """Bring Heidi to the foreground. A backgrounded WKWebView stops publishing
+    its AX tree, so long device flows must keep Heidi frontmost between steps."""
+    subprocess.run(["osascript", "-e", 'tell application "Heidi" to activate'],
+                   capture_output=True)
 
 
 class DevicePage:
@@ -158,17 +166,19 @@ class DevicePage:
     def wait_connected(self, timeout: float = 30.0) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
+            _activate_heidi()
             if self.is_connected():
                 return True
-            time.sleep(1)
+            time.sleep(1.5)
         return False
 
     def wait_disconnected(self, timeout: float = 30.0) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
+            _activate_heidi()
             if self.is_disconnected() and not self.is_reconnecting():
                 return True
-            time.sleep(1)
+            time.sleep(1.5)
         return False
 
     # --- onboarding (first pairing) -----------------------------------------
@@ -277,10 +287,12 @@ class DevicePage:
 
     def wait_remove_success(self, timeout: float = 60.0) -> bool:
         """Removal is done when either the success screen shows OR the page has
-        reverted to the initial pairing card (device unlinked)."""
+        reverted to the initial pairing card (device unlinked). Re-activates
+        Heidi each poll so a mid-flow focus steal doesn't blank the AX tree."""
         deadline = time.time() + timeout
         while time.time() < deadline:
+            _activate_heidi()
             if self.remove_succeeded() or self.has_initial_pairing_card():
                 return True
-            time.sleep(1)
+            time.sleep(2)
         return False

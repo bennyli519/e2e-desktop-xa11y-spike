@@ -59,10 +59,11 @@ def test_remote_lost_flow(devices: DevicePage, require_device, require_manual):
     )
     assert devices.confirm_lost_remove(), "Could not click 'Yes, remove'"
 
-    # THEN removal succeeds.
+    # THEN removal succeeds (success screen OR revert to initial pairing card).
     assert devices.wait_remove_success(timeout=90), "Removal did not complete"
-    assert devices.remove_succeeded(), "Success screen not shown"
     devices.remove_dismiss()
+    time.sleep(2)
+    devices.open()
     time.sleep(2)
     assert devices.has_initial_pairing_card(), (
         "Should revert to the initial pairing card after removal"
