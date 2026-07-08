@@ -56,6 +56,15 @@ class RecordingPage:
     def is_recording(self) -> bool:
         return self.app.locator(END_RECORDING).exists()
 
+    def duration_display(self) -> str | None:
+        """The mm:ss duration shown for the session.
+
+        Same mm:ss node as the live timer; after stopping it freezes at the
+        total recorded length (verified: static_text value='00:16' beside the
+        Resume button in reports/rec_after_stop.txt). Returns mm:ss or None.
+        """
+        return self.recording_timer()
+
     def note_generation_started(self) -> bool:
         return any(self.app.locator(sel).exists() for sel in GENERATING_MARKERS)
 

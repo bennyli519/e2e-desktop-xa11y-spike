@@ -66,6 +66,12 @@ def _flow_lines(res: RecordingResult) -> list[tuple[str, bool | None, str]]:
         ("note generated",
          (res.note_started and bool(res.note.strip())) if audio else res.note_started,
          "" if audio else "started only (no audio)"),
+        ("duration display correct",
+         (res.duration_display_s is not None and res.timer_last_s is not None
+          and abs(res.duration_display_s - res.timer_last_s)
+          <= max(3, int(res.timer_last_s * 0.05))),
+         f"shows {res.duration_display}" if res.duration_display
+         else "no duration shown"),
         ("transcript accuracy",
          (acc >= res.transcript_threshold) if audio else None,
          f"{acc:.1%} ({len(res.hits)}/{len(res.keywords)}), "

@@ -83,6 +83,33 @@ def check_note_generated(res: RecordingResult) -> None:
     assert res.note.strip(), f"[{res.flow}] generated note body is empty"
 
 
+def check_duration_display(res: RecordingResult) -> None:
+    """The mm:ss duration shown after stopping should match how long we
+    actually recorded (the last timer sample), within a small tolerance for
+    start/stop and AX-read overhead."""
+    _no_flow_error(res)
+    shown = res.duration_display_s
+    expected = res.timer_last_s
+    print(
+        f"\n[{res.flow}] duration display: {res.duration_display} "
+        f"({shown}s) vs recorded {expected}s"
+    )
+    assert shown is not None, (
+        f"[{res.flow}] no duration displayed after stopping "
+        f"(raw={res.duration_display!r})"
+    )
+    assert expected is not None, (
+        f"[{res.flow}] no timer reading to compare against"
+    )
+    # Allow the larger of 3s or 5% drift between the last live timer sample
+    # and the frozen post-stop display.
+    tol = max(3, int(expected * 0.05))
+    assert abs(shown - expected) <= tol, (
+        f"[{res.flow}] displayed duration {shown}s differs from recorded "
+        f"{expected}s by more than {tol}s"
+    )
+
+
 def check_transcript_accuracy(res: RecordingResult) -> None:
     _no_flow_error(res)
     if not res.audio_injected:

@@ -114,11 +114,11 @@ pytest "tests/recording/test_5min.py::test_transcript_accuracy" -v -s
 pytest -v
 ```
 
-Each duration file runs the recording flow **once** and exposes five separate
+Each duration file runs the recording flow **once** and exposes six separate
 tests — `recording_starts`, `timer_advances`, `transcription_generated`,
-`note_generated`, `transcript_accuracy` — so the output is a per-flow checklist.
-A demo-friendly ✓/✗ table prints at the end of every run (see the
-`RECORDING E2E — FLOW RESULTS` summary).
+`note_generated`, `duration_display`, `transcript_accuracy` — so the output is
+a per-flow checklist. A demo-friendly ✓/✗ table prints at the end of every run
+(see the `RECORDING E2E — FLOW RESULTS` summary).
 
 Useful knobs (env vars):
 

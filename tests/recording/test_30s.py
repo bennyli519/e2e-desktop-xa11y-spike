@@ -14,6 +14,7 @@ The flow runs ONCE (module-scoped `result` fixture); the tests read its cache.
 import pytest
 
 from _cases import (
+    check_duration_display,
     check_note_generated,
     check_recording_starts,
     check_timer_advances,
@@ -49,6 +50,11 @@ def test_transcription_generated(result):
 @pytest.mark.timeout(400)
 def test_note_generated(result):
     check_note_generated(result)
+
+
+@pytest.mark.timeout(400)
+def test_duration_display(result):
+    check_duration_display(result)
 
 
 @pytest.mark.timeout(400)

@@ -10,6 +10,7 @@ A >600s run must be launched with Hermes background=true (foreground caps 600s).
 import pytest
 
 from _cases import (
+    check_duration_display,
     check_note_generated,
     check_recording_starts,
     check_timer_advances,
@@ -45,6 +46,11 @@ def test_transcription_generated(result):
 @pytest.mark.timeout(1200)
 def test_note_generated(result):
     check_note_generated(result)
+
+
+@pytest.mark.timeout(1200)
+def test_duration_display(result):
+    check_duration_display(result)
 
 
 @pytest.mark.timeout(1200)

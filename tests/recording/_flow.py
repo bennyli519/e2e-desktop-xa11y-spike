@@ -90,6 +90,8 @@ class RecordingResult:
     timer_last_s: int | None = None
     note_started: bool = False
     note_completed: bool = False
+    duration_display: str | None = None    # mm:ss shown after stop
+    duration_display_s: int | None = None  # parsed to seconds
     transcript: str = ""
     note: str = ""
     error: str | None = None
@@ -211,6 +213,10 @@ def run_recording_flow(
             res.timer_advanced = last_s > first_s
 
         rec.stop_recording()
+        # Capture the frozen duration display right after stopping, before the
+        # note view can replace the timer node.
+        res.duration_display = rec.duration_display()
+        res.duration_display_s = _timer_to_seconds(res.duration_display)
         res.note_started = rec.wait_note_generation(timeout=90.0)
         res.note_completed = rec.wait_note_complete(timeout=240.0)
 
