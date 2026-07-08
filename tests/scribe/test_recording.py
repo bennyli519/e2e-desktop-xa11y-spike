@@ -60,6 +60,38 @@ def _fixture_path(env_name: str, default_name: str) -> Path:
     return _fixture_root() / default_name
 
 
+def _default_recording_input_device() -> str | None:
+    configured = os.environ.get("HEIDI_E2E_RECORDING_INPUT_DEVICE")
+    if configured:
+        return configured
+
+    if os.name == "nt":
+        script = r"""
+        Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue |
+          Where-Object {
+            $_.InstanceId -like 'SWD\MMDEVAPI\{0.0.1.*' -and
+            $_.FriendlyName -like '*CABLE Output*'
+          } |
+          Select-Object -First 1 -ExpandProperty FriendlyName
+        """
+        try:
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except Exception:
+            return "CABLE Output"
+        name = result.stdout.strip()
+        return name or "CABLE Output"
+
+    if sys.platform == "darwin":
+        return "BlackHole 2ch"
+
+    return None
+
+
 def _start_audio_fixture_playback(fixture: Path | None = None) -> subprocess.Popen | None:
     if fixture is None:
         configured = os.environ.get("HEIDI_E2E_AUDIO_FIXTURE")
@@ -119,7 +151,7 @@ def _terminate_playback(playback: subprocess.Popen | None) -> None:
 
 
 def _select_configured_input_device(scribe: ScribePage, dump_tree) -> None:
-    target_device = os.environ.get("HEIDI_E2E_RECORDING_INPUT_DEVICE")
+    target_device = _default_recording_input_device()
     if target_device and not scribe.select_input_device(target_device):
         dump_tree("recording_input_device_missing", max_depth=60)
         pytest.fail(

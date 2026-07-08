@@ -117,14 +117,16 @@ class ScribePage:
                 try:
                     el.press()
                     time.sleep(1)
-                    return matches_device(self.selected_input_device())
+                    selected = self.selected_input_device()
+                    return selected is None or matches_device(selected)
                 except Exception:
                     pass
 
                 try:
                     xa11y.input_sim().click(el)
                     time.sleep(1)
-                    return matches_device(self.selected_input_device())
+                    selected = self.selected_input_device()
+                    return selected is None or matches_device(selected)
                 except Exception:
                     continue
 
@@ -375,9 +377,15 @@ class ScribePage:
         return "\n".join(chunks)
 
     def _input_device_combo(self):
+        candidates = []
         for el in self.app.locator("combo_box").elements():
+            if (el.name or "") == "Add patient identifier":
+                continue
             if el.value:
                 return el
+            candidates.append(el)
+        if candidates:
+            return sorted(candidates, key=lambda el: (el.bounds.y, el.bounds.x))[0]
         return None
 
     def _activate_tab(self, tab_name: str) -> bool:

@@ -125,15 +125,17 @@ $env:HEIDI_EXE_PATH = "C:\Users\you\AppData\Local\Heidi\Heidi.exe"
 ### Recording smoke with a virtual audio device
 
 Desktop recording uses the real Tauri audio stack, not Playwright's
-`navigator.mediaDevices.getUserMedia` mock. To run the recording smoke against
-a virtual input device, configure the device name exactly as Heidi shows it:
+`navigator.mediaDevices.getUserMedia` mock. By default the suite selects
+`BlackHole 2ch` on macOS and `CABLE Output (VB-Audio Virtual Cable)` on
+Windows when those devices are present. Override the device name only when your
+local virtual device is named differently:
 
 ```bash
 HEIDI_E2E_RECORDING_INPUT_DEVICE="BlackHole 2ch" pytest tests/scribe/test_recording.py -v -s
 ```
 
-On Windows, use the equivalent virtual cable device name instead. The test can
-also start an audio fixture while recording:
+On Windows, the test can also start an audio fixture while recording. Playback
+defaults to the first output matching `CABLE Input`; override only if needed:
 
 ```powershell
 $env:HEIDI_E2E_RECORDING_INPUT_DEVICE = "CABLE Output (VB-Audio Virtual Cable)"
@@ -157,6 +159,15 @@ To inspect the device names available to the test runner:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\check_audio_devices.py
+```
+
+If your device names differ, set overrides with `$env:` in the current
+PowerShell session, or save them in `.env.e2e` so pytest loads them
+automatically:
+
+```dotenv
+HEIDI_E2E_RECORDING_INPUT_DEVICE="CABLE Output (VB-Audio Virtual Cable)"
+HEIDI_E2E_AUDIO_PLAYBACK_DEVICE="CABLE Input (VB-Audio Virtual Cable)"
 ```
 
 For non-WAV fixtures or custom routing, set `HEIDI_E2E_AUDIO_PLAY_CMD` with
