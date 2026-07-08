@@ -24,7 +24,7 @@ results, and how to wire it into CI / release.
 | 6 | **BlackHole 2ch** (virtual audio device) | Injects the fixed consult audio into Heidi's mic | `brew install blackhole-2ch` → **reboot** (or `sudo killall coreaudiod`) → verify `system_profiler SPAudioDataType \| grep -i BlackHole` |
 | 7 | **SwitchAudioSource** | Switches the default input/output to BlackHole and back | `brew install switchaudio-osx` |
 | 8 | **A logged-in Heidi session** | Skips the slow/fragile Auth0 flow for content tests | Log in once manually; the Auth0 token persists. Test account creds live in `.env.e2e` (gitignored) |
-| 9 | **Fixed consult audio** | The known input we assert against | `sh scripts/setup_audio.sh` regenerates `assets/consult_{30s,5min,10min}.wav` |
+| 9 | **Fixed consult audio** | The known input we assert against | `sh scripts/setup_audio.sh` regenerates `assets/consult_{30s,1min,5min,10min}.wav` |
 
 Steps 3, 6, 7, 9 are automated by **`sh scripts/setup_audio.sh`** (it still
 needs your password for BlackHole and a reboot afterwards).
@@ -97,24 +97,33 @@ cd e2e-desktop-xa11y-spike
 source .venv/bin/activate
 unset HEIDI_E2E_PASSWORD            # let .env.e2e win (pitfall #6)
 
-# Core recording scenario (~30s) + true content check
+# One flow at a time (each file = one duration, 5 checks inside)
+pytest tests/recording/test_30s.py -v -s      # 30-second flow
+pytest tests/recording/test_1min.py -v -s     # 1-minute flow
+
+# Core fast check only (30s) — skips the multi-minute flows
 pytest tests/recording/ -v -s -m "not longsession"
 
-# One case
-pytest "tests/recording/test_record_note_generation.py::test_record_transcribes_spoken_content" -v -s
-
-# Long sessions (5 & 10 min real consult audio) — slow
+# Long sessions (1 / 5 / 10 min real consult audio) — slow
 pytest tests/recording/ -v -s -m longsession
+
+# One assertion of one flow
+pytest "tests/recording/test_5min.py::test_transcript_accuracy" -v -s
 
 # Whole suite
 pytest -v
 ```
 
+Each duration file runs the recording flow **once** and exposes five separate
+tests — `recording_starts`, `timer_advances`, `transcription_generated`,
+`note_generated`, `transcript_accuracy` — so the output is a per-flow checklist.
+A demo-friendly ✓/✗ table prints at the end of every run (see the
+`RECORDING E2E — FLOW RESULTS` summary).
+
 Useful knobs (env vars):
 
 | Var | Default | Effect |
 |---|---|---|
-| `RECORD_SECONDS` | 30 | Duration of the core 30s scenario |
 | `TRANSCRIPT_MATCH_THRESHOLD` | 0.9 | Min transcription accuracy (fraction of keywords found). Set `0.6` for a loose smoke run |
 | `RECORD_VIDEO` | 1 | Set `0` to skip per-test screen video (faster) |
 | `HEIDI_APP_PATH` | — | Point at a specific `.app` build |
@@ -149,8 +158,8 @@ failure** to `reports/artifacts/`:
 
 ```
 reports/artifacts/
-  tests_recording_..._test_record_5min_session.mp4
-  tests_recording_..._test_..._FAIL.png     # only on failure
+  tests_recording_test_5min_..._test_transcript_accuracy.mp4
+  tests_recording_test_1min_..._test_..._FAIL.png     # only on failure
 ```
 
 QA can watch exactly what happened. These are the fastest way to triage a flake.

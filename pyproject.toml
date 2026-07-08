@@ -28,6 +28,8 @@ addopts = [
     "-v",
     "--timeout=120",
     "--tb=short",
+    "--html=reports/report.html",
+    "--self-contained-html",
 ]
 markers = [
     "smoke: basic presence/render checks",

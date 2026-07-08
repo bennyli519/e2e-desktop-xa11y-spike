@@ -54,6 +54,7 @@ Doctor: Any recent changes in stress, diet, or caffeine intake? \
 Patient: Work has been stressful, and I've probably been drinking more coffee than normal, maybe four cups a day. \
 Doctor: Okay. Let's check your blood pressure and discuss some options."
 afconvert assets/consult_30s.aiff assets/consult_30s.wav -d LEI16 -f WAVE
+[ -f assets/consult_1min.txt ] && say -v Samantha -r 150 -f assets/consult_1min.txt -o assets/consult_1min.aiff && afconvert assets/consult_1min.aiff assets/consult_1min.wav -d LEI16 -f WAVE
 [ -f assets/consult_5min.txt ] && say -v Samantha -r 150 -f assets/consult_5min.txt -o assets/consult_5min.aiff && afconvert assets/consult_5min.aiff assets/consult_5min.wav -d LEI16 -f WAVE
 [ -f assets/consult_10min.txt ] && say -v Samantha -r 108 -f assets/consult_10min.txt -o assets/consult_10min.aiff && afconvert assets/consult_10min.aiff assets/consult_10min.wav -d LEI16 -f WAVE
 

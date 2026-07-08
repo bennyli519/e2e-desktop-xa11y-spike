@@ -1,0 +1,11 @@
+Doctor: Good morning, thanks for coming in. What brings you here today?
+Patient: Morning doctor. I've had a persistent headache for about three weeks, mostly across my forehead and behind my eyes. It's a dull, pressing pain that comes on in the afternoon and gets worse by the evening.
+Doctor: Any nausea, vomiting, or sensitivity to light or sound?
+Patient: Some sensitivity to bright light, yes. No vomiting or nausea though. I've also been feeling really tired all the time.
+Doctor: Tell me about your sleep.
+Patient: I fall asleep okay, but I keep waking around three in the morning and can't get back to sleep. I feel exhausted, and I've been relying on coffee, maybe five cups a day.
+Doctor: Have you been feeling stressed or anxious lately?
+Patient: Yes, work has been really demanding. My chest feels tight sometimes and my heart races, with a bit of shortness of breath.
+Doctor: Any ongoing conditions?
+Patient: High blood pressure. I take amlodipine, but I forget it about half the time.
+Doctor: Let's check your blood pressure and arrange some blood tests. We'll reduce the caffeine and review in four weeks.

@@ -32,6 +32,10 @@ Patient: Work has been stressful, and I've probably been drinking more coffee th
 Doctor: Okay. Let's check your blood pressure and discuss some options to manage the headaches and improve your sleep."
 afconvert "$REPO/assets/consult_30s.aiff" "$REPO/assets/consult_30s.wav" -d LEI16 -f WAVE
 
+# 1-minute consult from committed text file (~75s at rate 150).
+say -v Samantha -r 150 -f "$REPO/assets/consult_1min.txt" -o "$REPO/assets/consult_1min.aiff"
+afconvert "$REPO/assets/consult_1min.aiff" "$REPO/assets/consult_1min.wav" -d LEI16 -f WAVE
+
 # Long consults from committed text files. Rate tuned to hit ~5 / ~8-10 min.
 say -v Samantha -r 150 -f "$REPO/assets/consult_5min.txt" -o "$REPO/assets/consult_5min.aiff"
 afconvert "$REPO/assets/consult_5min.aiff" "$REPO/assets/consult_5min.wav" -d LEI16 -f WAVE
@@ -39,7 +43,7 @@ say -v Samantha -r 108 -f "$REPO/assets/consult_10min.txt" -o "$REPO/assets/cons
 afconvert "$REPO/assets/consult_10min.aiff" "$REPO/assets/consult_10min.wav" -d LEI16 -f WAVE
 
 echo "==> Clip durations:"
-for f in 30s 5min 10min; do
+for f in 30s 1min 5min 10min; do
   python3 -c "import wave; w=wave.open('$REPO/assets/consult_$f.wav'); print('  consult_$f.wav', round(w.getnframes()/w.getframerate(),1),'s')"
 done
 
