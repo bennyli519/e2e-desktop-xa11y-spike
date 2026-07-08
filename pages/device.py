@@ -13,7 +13,7 @@ import time
 
 import xa11y
 
-from lib import activate_app, click_first_match
+from lib import IS_WINDOWS, activate_app, click_first_match
 from pages.sidebar import Sidebar
 
 
@@ -47,13 +47,24 @@ class DevicePage:
         if click_first_match(self.app, ["button[name='Remind me later']"]):
             time.sleep(1)
             return
+
+        if click_first_match(self.app, ["button[name='Try Again']"]):
+            time.sleep(3)
+            return
+
         if self.app.locator(
             "static_text[value*=\"Can't find your Heidi Remote\"]"
         ).exists():
             sim.chord("r", ["Meta"])
             time.sleep(3)
             return
-        if self.app.locator("button[name='Close']").exists():
+        # macOS AX doesn't publish a `dialog` role for these modals, so the
+        # Close button alone is the signal (verified on hardware); Windows UIA
+        # exposes the modal as a `dialog` and may show an unrelated 'Close', so
+        # require both there.
+        if self.app.locator("button[name='Close']").exists() and (
+            not IS_WINDOWS or self.app.locator("dialog").exists()
+        ):
             click_first_match(self.app, ["button[name='Close']"])
             time.sleep(0.8)
             return
@@ -101,14 +112,15 @@ class DevicePage:
         return self.app.locator("button[name*='Reconnecting']").exists()
 
     def connected_via(self) -> str | None:
-        """Transport shown under the status ('Bluetooth' / 'USB'). The label
-        'Connected via ' and the transport are separate sibling static_text
-        nodes, so scan for the label then read the next node."""
-        texts = [(e.value or "").strip() for e in
+        """Transport shown under the status ('Bluetooth' / 'USB'). On macOS AX the
+        label 'Connected via ' and the transport are separate sibling static_text
+        nodes (scan for the label, read the next node); on Windows UIA the text
+        arrives via `name`, so read value-or-name throughout."""
+        texts = [((e.value or e.name) or "").strip() for e in
                  self.app.locator("static_text").elements()]
         for i, v in enumerate(texts):
             if v.startswith("Connected via"):
-                # value may be in the same node ("Connected via Bluetooth") or next
+                # value may be inline ("Connected via Bluetooth") or the next node
                 tail = v.replace("Connected via", "").strip()
                 if tail:
                     return tail
@@ -119,26 +131,42 @@ class DevicePage:
 
     # --- device info reads --------------------------------------------------
     def has_serial_number(self) -> bool:
-        return self.app.locator("static_text[value*='Serial Number']").exists()
+        return self.app.locator(
+            "static_text[value*='Serial Number'], "
+            "static_text[name*='Serial Number'], "
+            "static_text[value*='Serial number'], "
+            "static_text[name*='Serial number']"
+        ).exists()
 
     def get_serial_number(self) -> str | None:
-        """Serial value. Label and value are SEPARATE sibling static_text nodes
-        ('Serial Number' then e.g. 'HV0_251106_000003'), so we scan for the label
-        and return the next value-looking node."""
-        texts = [(e.value or "").strip() for e in
+        """Serial value, cross-platform. macOS AX exposes label and value as
+        SEPARATE sibling static_text nodes ('Serial Number' then e.g.
+        'HV0_251106_000003'); Windows UIA exposes one node via `name`
+        ('Serial number: HV0_...'). Read value-or-name, split on ':' when the
+        serial is inline, else return the adjacent sibling value node."""
+        texts = [((e.value or e.name) or "").strip() for e in
                  self.app.locator("static_text").elements()]
         for i, v in enumerate(texts):
-            if v == "Serial Number":
-                for nxt in texts[i + 1:i + 4]:
+            if v.lower().startswith("serial number"):
+                if ":" in v:  # inline "Serial number: HV0_..." (Windows)
+                    tail = v.split(":", 1)[1].strip()
+                    if tail:
+                        return tail
+                for nxt in texts[i + 1:i + 4]:  # sibling value node (macOS)
                     if nxt and nxt not in ("N/A",) and "Firmware" not in nxt:
                         return nxt
         return None
 
     def has_firmware_version(self) -> bool:
-        return self.app.locator("static_text[value*='Firmware version']").exists()
+        return self.app.locator(
+            "static_text[value*='Firmware version'], "
+            "static_text[name*='Firmware version']"
+        ).exists()
 
     def has_battery(self) -> bool:
-        return self.app.locator("static_text[value*='Battery']").exists()
+        return self.app.locator(
+            "static_text[value*='Battery'], static_text[name*='Battery']"
+        ).exists()
 
     def has_device_state_info(self) -> bool:
         """Connected device shows serial + firmware (battery optional)."""

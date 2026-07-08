@@ -70,7 +70,7 @@ def load_password() -> str:
     env_file = Path(__file__).resolve().parent.parent / ".env.e2e"
     if not env_file.exists():
         sys.exit(f"No .env.e2e at {env_file}")
-    for line in env_file.read_text().splitlines():
+    for line in env_file.read_text(encoding="utf-8").splitlines():
         if line.startswith("HEIDI_E2E_PASSWORD="):
             return line.partition("=")[2].strip()
     sys.exit("HEIDI_E2E_PASSWORD not found in .env.e2e")

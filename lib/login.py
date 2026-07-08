@@ -32,7 +32,7 @@ def _load_env_file() -> dict[str, str]:
     env: dict[str, str] = {}
     env_file = Path(__file__).resolve().parent.parent / ".env.e2e"
     if env_file.exists():
-        for line in env_file.read_text().splitlines():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -46,7 +46,11 @@ def get_credentials() -> tuple[str, str]:
     # shell silently shadowed the file and corrupted the password during the
     # spike, so the file is the source of truth.
     file_env = _load_env_file()
-    email = file_env.get("HEIDI_E2E_EMAIL") or os.environ.get("HEIDI_E2E_EMAIL") or "benny@heidihealth.com"
+    email = (
+        file_env.get("HEIDI_E2E_EMAIL")
+        or os.environ.get("HEIDI_E2E_EMAIL")
+        or "benny@heidihealth.com"
+    )
     password = file_env.get("HEIDI_E2E_PASSWORD") or os.environ.get("HEIDI_E2E_PASSWORD", "")
     if not password:
         raise LoginError(
@@ -99,12 +103,20 @@ def _force_abc_input_source() -> None:
 LOGGED_IN_MARKERS = [
     "button[name='Scribe']",
     "button[name='New session']",
-    "combo_box[name='Devices']",
+    "button[name='Transcribe']",  # Windows / newer naming
+    "combo_box[name='Devices']",  # macOS sidebar
     "static_text[value='Scribe']",  # legacy fallback
+    "static_text[value='Devices']",
+    "static_text[value*='Transcribe']",
 ]
 
 LOGIN_PAGE_MARKERS = [
-    "text_field",                       # email input
+    "text_field[name='name@company.com']",
+    "text_field[name*='email']",
+    "text_field[name*='Email']",
+    "text_field[value*='email']",
+    "text_field[value*='Email']",
+    "button[name='Continue']",
     "static_text[value*='Log in']",
     "static_text[value*='Sign in']",
     "static_text[value*='email']",
@@ -138,7 +150,10 @@ def perform_login(app: xa11y.App, timeout: float = 90.0) -> None:
     # ── Step 1: email in the Tauri login page ──────────────────────────────
     email_field = app.locator("text_field")
     email_field.wait_visible(timeout=15.0)
-    email_field.press()           # focus
+    try:
+        email_field.focus()
+    except xa11y.ActionNotSupportedError:
+        pass
     email_field.set_value(email)  # set_value is more reliable than type_text
     time.sleep(0.5)
 
@@ -150,8 +165,11 @@ def perform_login(app: xa11y.App, timeout: float = 90.0) -> None:
         continue_btn.press()
         time.sleep(1)
         # If still on the login page, the React button didn't fire — use Enter
-        if app.locator("text_field").exists():
-            email_field.press()
+        if is_on_login_page(app):
+            try:
+                email_field.focus()
+            except xa11y.ActionNotSupportedError:
+                pass
             sim.press("Enter")
     else:
         sim.press("Enter")
@@ -191,11 +209,30 @@ def _find_auth0_window(timeout: float) -> tuple[xa11y.App | None, "xa11y.Element
 
     deadline = time.time() + timeout
     while time.time() < deadline:
+        candidates: list[xa11y.App] = []
         for name in browser_names:
             try:
-                app = xa11y.App.by_name(name, timeout=0.5)
+                candidates.append(xa11y.App.by_name(name, timeout=0.5))
             except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
                 continue
+        try:
+            for app in xa11y.App.list():
+                app_title = (app.name or "").lower()
+                if any(m in app_title for m in markers) or any(
+                    name.lower() in app_title for name in browser_names
+                ):
+                    candidates.append(app)
+        except Exception:
+            pass
+
+        seen: set[int] = set()
+        for app in candidates:
+            if app.pid in seen:
+                continue
+            seen.add(app.pid)
+            title = (app.name or "").lower()
+            if any(m in title for m in markers):
+                return app, app.as_element()
             try:
                 for win in app.children():
                     title = (win.name or "").lower()
@@ -228,6 +265,10 @@ def _fill_auth0_form_via_input(
       4. Type the password CHAR BY CHAR via InputSim (low-level CGEvent).
       5. Press Enter.
     """
+    if os.name == "nt":
+        _fill_auth0_form_windows(browser, password)
+        return
+
     import subprocess
 
     sim = xa11y.input_sim()
@@ -263,6 +304,28 @@ def _fill_auth0_form_via_input(
     #    This native dialog IS in Chrome's AX tree (unlike web content), but
     #    its buttons have empty names. The two buttons are [Cancel, Open Heidi];
     #    the 2nd is "Open Heidi". Click it to bounce back into the app.
+    _confirm_open_app_dialog(browser, timeout=15.0)
+    time.sleep(2)
+
+
+def _fill_auth0_form_windows(browser: xa11y.App, password: str) -> None:
+    """Fill Auth0 in Chrome/Edge on Windows via UIA-exposed controls."""
+    sim = xa11y.input_sim()
+    password_field = browser.locator("text_field[name*='Password']")
+    password_field.wait_visible(timeout=15.0)
+    try:
+        password_field.focus()
+    except xa11y.ActionNotSupportedError:
+        pass
+    password_field.set_value(password)
+    time.sleep(0.3)
+
+    continue_btn = browser.locator("button[name='Continue']")
+    if continue_btn.exists():
+        continue_btn.press()
+    else:
+        sim.press("Enter")
+
     _confirm_open_app_dialog(browser, timeout=15.0)
     time.sleep(2)
 
