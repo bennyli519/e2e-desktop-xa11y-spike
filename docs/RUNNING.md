@@ -97,6 +97,10 @@ cd e2e-desktop-xa11y-spike
 source .venv/bin/activate
 unset HEIDI_E2E_PASSWORD            # let .env.e2e win (pitfall #6)
 
+# Smoke: auto-login + 30s recording end-to-end (one invocation, login first)
+bash scripts/smoke.sh               # default: login + 30s
+bash scripts/smoke.sh --full        # login + all recording flows (30s/1/5/10min)
+
 # One flow at a time (each file = one duration, 5 checks inside)
 pytest tests/recording/test_30s.py -v -s      # 30-second flow
 pytest tests/recording/test_1min.py -v -s     # 1-minute flow
