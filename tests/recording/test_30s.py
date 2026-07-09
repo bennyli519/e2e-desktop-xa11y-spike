@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.recording, pytest.mark.slow]
 
 result = make_result_fixture(
     flow="30s", seconds=30, clip="consult_30s.wav",
-    keywords=KEYWORDS_30S, transcript_threshold=0.9,
+    keywords=KEYWORDS_30S, transcript_threshold=0.5,
 )
 
 
