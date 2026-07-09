@@ -30,26 +30,16 @@ import os
 import pytest
 import xa11y
 
-from _cases import check_entry_point_present
+from _cases import check_entry_point_present, require_login_screen
 from _flow import SIGNUP_MARKERS, verify_entry_point_launches
-from lib.login import is_logged_in, is_on_login_page
-from pages import AuthPage
 
 pytestmark = [pytest.mark.auth]
 
 RUN_MANUAL = os.environ.get("RUN_MANUAL") == "1"
 
 
-def _require_login_screen(app: xa11y.App) -> AuthPage:
-    if is_logged_in(app):
-        pytest.skip("Already logged in — sign out to test the Sign up entry point")
-    if not is_on_login_page(app):
-        pytest.skip("Not on the login page — cannot test the Sign up entry point")
-    return AuthPage(app)
-
-
 def test_signup_entry_present(heidi_app: xa11y.App):
-    page = _require_login_screen(heidi_app)
+    page = require_login_screen(heidi_app, "Sign up")
     check_entry_point_present(page.has_signup_link(), "Sign up")
 
 
@@ -65,7 +55,7 @@ def test_signup_navigates(heidi_app: xa11y.App):
     suite proves the IdP flow started. Completing registration (email
     verification via Mailosaur, onboarding) is a MANUAL step beyond this.
     """
-    page = _require_login_screen(heidi_app)
+    page = require_login_screen(heidi_app, "Sign up")
     launched, title = verify_entry_point_launches(page.press_signup, SIGNUP_MARKERS)
     left_login_screen = not page.has_login_field()
     assert launched or left_login_screen, (

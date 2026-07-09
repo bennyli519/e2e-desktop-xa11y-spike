@@ -7,10 +7,14 @@ recording domain, so the pytest output reads as a per-step checklist.
 from __future__ import annotations
 
 import os
+import time
 
 import pytest
+import xa11y
 
 from _flow import LoginResult, run_email_password_login
+from lib.login import is_logged_in, is_on_login_page
+from pages import AuthPage
 
 
 def make_login_result_fixture():
@@ -21,6 +25,27 @@ def make_login_result_fixture():
         return run_email_password_login(heidi_app)
 
     return result
+
+
+def require_login_screen(app: xa11y.App, what: str) -> AuthPage:
+    """Return an AuthPage on the login screen, or skip.
+
+    With FORCE_LOGIN=1, sign out first so an already-authenticated session can
+    still exercise the login-screen entry points (Google/Apple/Sign up).
+    """
+    page = AuthPage(app)
+    if is_logged_in(app):
+        if os.environ.get("FORCE_LOGIN") == "1":
+            page.sign_out()
+            time.sleep(2.0)
+        if is_logged_in(app):
+            pytest.skip(
+                f"Already logged in — sign out (or set FORCE_LOGIN=1) to test "
+                f"the {what} entry point"
+            )
+    if not is_on_login_page(app):
+        pytest.skip(f"Not on the login page — cannot test the {what} entry point")
+    return page
 
 
 def _skip_if_already_in(res: LoginResult) -> None:

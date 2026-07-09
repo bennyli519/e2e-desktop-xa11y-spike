@@ -146,3 +146,61 @@ class AuthPage:
             and self.can_reach_settings()
             and not self.has_login_field()
         )
+
+    # -- sign out (to force a fresh login run) ----------------------------
+    # The web LogoutPage opens the user dropdown (user-dropdown-trigger) then
+    # clicks "Log out" (sidebar-menu-logout). testid is invisible to AX, so we
+    # try the account-menu control by role+name, then the "Log out" item.
+    ACCOUNT_MENU_SELECTORS = [
+        "button[name='Account']",
+        "combo_box[name='Account']",
+        "button[name*='account']",
+        "combo_box[name*='account']",
+        "button[name='Settings']",
+        "combo_box[name='Settings']",
+        "button[name='Help']",
+        "combo_box[name='Help']",
+    ]
+    LOGOUT_ITEM_SELECTORS = [
+        "button[name='Log out']",
+        "menu_item[name='Log out']",
+        "link[name='Log out']",
+        "button[name='Logout']",
+        "menu_item[name='Logout']",
+        "button[name='Sign out']",
+        "menu_item[name='Sign out']",
+        "static_text[value='Log out']",
+    ]
+
+    def _click_logout_item(self) -> bool:
+        return click_first_match(self.app, self.LOGOUT_ITEM_SELECTORS)
+
+    def sign_out(self) -> bool:
+        """Best-effort sign out so a fresh login can be exercised.
+
+        Returns True once the login field is back (i.e. we're logged out).
+        The account/user menu control label isn't confirmed against the AX
+        tree yet — if this returns False, dump the tree and add the real
+        selector to ACCOUNT_MENU_SELECTORS / LOGOUT_ITEM_SELECTORS.
+        """
+        # 1. Logout item may already be visible (some layouts show it directly).
+        if self._click_logout_item():
+            time.sleep(2.0)
+            if self.has_login_field():
+                return True
+
+        # 2. Open the account/user menu, then click Log out.
+        for sel in self.ACCOUNT_MENU_SELECTORS:
+            try:
+                loc = self.app.locator(sel)
+                if not loc.exists():
+                    continue
+                loc.press()
+                time.sleep(1.0)
+                if self._click_logout_item():
+                    time.sleep(2.0)
+                    if self.has_login_field():
+                        return True
+            except Exception:
+                continue
+        return self.has_login_field()

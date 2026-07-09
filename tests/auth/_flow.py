@@ -25,6 +25,7 @@ there. See each test file for the explicit scope note.
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 
@@ -102,6 +103,13 @@ def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
         )
 
     try:
+        # FORCE_LOGIN=1 signs out first so the full fresh login flow (email ->
+        # Auth0 -> password -> redirect) is actually exercised, not skipped
+        # because the persisted token left us already logged in.
+        if os.environ.get("FORCE_LOGIN") == "1" and is_logged_in(heidi_app):
+            AuthPage(heidi_app).sign_out()
+            time.sleep(2.0)
+
         if is_logged_in(heidi_app):
             res.already_logged_in = True
             res.reached_app = True

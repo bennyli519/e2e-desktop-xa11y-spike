@@ -28,26 +28,16 @@ import os
 import pytest
 import xa11y
 
-from _cases import check_entry_point_present
+from _cases import check_entry_point_present, require_login_screen
 from _flow import APPLE_MARKERS, verify_entry_point_launches
-from lib.login import is_logged_in, is_on_login_page
-from pages import AuthPage
 
 pytestmark = [pytest.mark.auth]
 
 RUN_MANUAL = os.environ.get("RUN_MANUAL") == "1"
 
 
-def _require_login_screen(app: xa11y.App) -> AuthPage:
-    if is_logged_in(app):
-        pytest.skip("Already logged in — sign out to test the Apple entry point")
-    if not is_on_login_page(app):
-        pytest.skip("Not on the login page — cannot test the Apple entry point")
-    return AuthPage(app)
-
-
 def test_apple_entry_present(heidi_app: xa11y.App):
-    page = _require_login_screen(heidi_app)
+    page = require_login_screen(heidi_app, "Apple sign-in")
     check_entry_point_present(page.has_apple_button(), "Apple sign-in")
 
 
@@ -58,7 +48,7 @@ def test_apple_entry_present(heidi_app: xa11y.App):
 def test_apple_launches(heidi_app: xa11y.App):
     """Pressing Apple should actually open the Apple sign-in page in a browser
     (verified by the browser window title), not merely accept a click."""
-    page = _require_login_screen(heidi_app)
+    page = require_login_screen(heidi_app, "Apple sign-in")
     launched, title = verify_entry_point_launches(page.press_apple, APPLE_MARKERS)
     assert launched, (
         "Apple sign-in did not open an Apple sign-in browser window "
