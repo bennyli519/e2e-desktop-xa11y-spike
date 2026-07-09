@@ -142,6 +142,7 @@ the Page Object method once; specs are untouched.
 
 ## How to work on this repo
 
+- **Skill:** for the full add-a-test workflow, load `.claude/skills/e2e-test-authoring/`.
 - Discover selectors from real dumps, never guess:
   `python scripts/dump_page.py --page <Page>` → read `reports/<page>_tree.txt`.
 - Add a test: new `tests/<feature>/test_<case>.py`, use a Page Object, mark with
