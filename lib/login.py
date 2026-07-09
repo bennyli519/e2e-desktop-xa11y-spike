@@ -103,8 +103,9 @@ def _force_abc_input_source() -> None:
 LOGGED_IN_MARKERS = [
     "button[name='Scribe']",
     "button[name='New session']",
-    "button[name='Transcribe']",
-    "static_text[value='Scribe']",
+    "button[name='Transcribe']",  # Windows / newer naming
+    "combo_box[name='Devices']",  # macOS sidebar
+    "static_text[value='Scribe']",  # legacy fallback
     "static_text[value='Devices']",
     "static_text[value*='Transcribe']",
 ]

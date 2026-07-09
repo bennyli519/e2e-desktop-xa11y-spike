@@ -16,12 +16,27 @@ discover the tree, write a spec, run it, read the result.
 
 ## Current state
 
-- 21 tests, feature-organised. smoke / auth / navigation / scribe all pass.
-  devices (7) need a run against real Chronicle BLE hardware (they skip if no
-  device is present).
+- smoke / auth / navigation / scribe all pass.
+- **Recording POC (APP-7808):** `tests/recording/` drives login → new session →
+  record → stop → note generation, with real audio injected via BlackHole and a
+  transcript-accuracy check (verbatim Transcript tab, `TRANSCRIPT_MATCH_THRESHOLD`
+  default 0.9). 30s/5min/10min cases all green locally (100%/100%/92%).
+  See `docs/RUNNING.md` for setup/CI and `scripts/bootstrap.sh` for one-shot prep.
+- **Device flows restructured** into one-flow-per-file:
+  `tests/device-connection/` (first-onboarding, connected-reconnect,
+  reconnect-stress ×10, startup-autoconnect, remote-lost), `tests/ota-upgrade/`,
+  `tests/remote-session-recording/`, `tests/bulk-sync/`. Selectors traced from
+  scribe-fe-v2 source (text-match now, aria-labels later). **Verified on real
+  hardware (HV0_251106_000003):** first-onboarding, connected-reconnect,
+  reconnect-stress (100%), startup-autoconnect, remote-lost all PASS. Remote
+  session recording skips (input-trigger has no AX name); ota/bulk-sync need
+  a firmware update / pending offline recordings to exercise.
+- Device tests skip cleanly when no device is paired (`require_device` fixture).
+  Destructive ones (remove/onboarding/ota) are guarded by `RUN_MANUAL=1`.
 - Auto-login works end-to-end (the hard part — see below).
 - Per-test video recording + failure screenshots wired in `conftest.py`.
-- Pushed to https://github.com/bennyli519/e2e-desktop-xa11y-spike (branch `master`).
+- Pushed to https://github.com/bennyli519/e2e-desktop-xa11y-spike; recording +
+  device work is on branch `poc/scribe-recording-flows` (PR #1).
 
 ## Environment (as of the spike)
 
@@ -92,6 +107,38 @@ the Page Object method once; specs are untouched.
    closes modals before each nav test.
 9. **Some text areas don't echo value via AX** (read `'\n'`) → assert `editable`/
    role instead of content.
+10. **Heidi window backgrounded → EMPTY AX tree.** A non-foreground WKWebView
+    stops publishing its AX tree (you get a 20-char stub). Keep Heidi frontmost;
+    the recording harness runs `osascript -e 'tell application "Heidi" to
+    activate'` before acting.
+    - **This also fails across Spaces:** a window on a NON-ACTIVE Mission Control
+      Space reads empty too (`count of windows` = 0). Putting Heidi on its own
+      Desktop and working elsewhere does NOT work — Heidi must be on the ACTIVE
+      Space AND frontmost. Run device tests with Heidi + terminal on one Space
+      and don't switch away for the duration.
+    - **Mid-flow focus steal is the #1 device-test flake:** a long flow (remove
+      ~1.5 min) fails if any window (e.g. an editor) grabs focus partway. The
+      device `wait_*()` helpers re-activate Heidi each poll (`_activate_heidi()`
+      in pages/device.py) to self-heal, but still avoid stealing focus.
+11. **BlackHole device missing after install** → reload CoreAudio with
+    `sudo killall coreaudiod` (SIP blocks the non-sudo `launchctl kickstart`);
+    verify with `system_profiler SPAudioDataType | grep -i BlackHole`.
+12. **Device-card label/value are SEPARATE sibling static_text nodes**, not
+    "Label: value" in one node (e.g. `"Serial Number"` then `"HV0_..."`;
+    `"Connected via "` then `"Bluetooth"`; `"Battery"` then `"100"`). Read the
+    label node, then grab the adjacent value node — don't split on `:`.
+13. **Device removal has no distinct success screen on the lost path** — the app
+    reverts straight to the initial pairing card. `wait_remove_success()` accepts
+    either the success text OR `has_initial_pairing_card()`.
+14. **Fresh re-pair over BLE is slow** — after removing a device, reconnecting in
+    onboarding can take >40s to reach "Successfully connected". Poll up to ~80s.
+15. **Onboarding setup wizard = multiple screens**, verified real order:
+    default-note `Confirm` → language `Confirm` → Onboarding Basics (`Next`×3 →
+    `Done`) → Enable USB-C modal (`Dismiss`). `DevicePage.complete_onboarding_setup()`
+    clicks whatever advance button is present until none remain.
+16. **Input-source trigger is icon-only (no AX name)** — can't select "Heidi
+    Remote" as the recording input by text yet. remote-session recording skips
+    until scribe-fe-v2 adds an aria-label to `v2-input-source-trigger`.
 
 ## How to work on this repo
 

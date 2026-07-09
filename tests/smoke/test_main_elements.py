@@ -11,6 +11,7 @@ pytestmark = pytest.mark.smoke
 def scribe(heidi_app: xa11y.App) -> ScribePage:
     sp = ScribePage(heidi_app)
     sp.open()
+    sp.open_context_tab()  # note text_area only renders on the Context tab
     return sp
 
 

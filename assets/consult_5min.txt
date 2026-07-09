@@ -1,0 +1,38 @@
+Doctor: Good morning, thanks for coming in. What brings you here today?
+Patient: Morning doctor. I've been having a few things going on. Mainly a persistent headache for about three weeks now, and honestly my sleep has been terrible.
+Doctor: Let's start with the headache. Can you describe it for me? Where is it, and what does it feel like?
+Patient: It's mostly across my forehead and behind my eyes. A dull, pressing pain, not throbbing. It tends to come on in the afternoon and gets worse by the evening.
+Doctor: On a scale of one to ten, how severe is it at its worst?
+Patient: Probably a six or seven. Enough that I can't concentrate at work.
+Doctor: Any nausea, vomiting, or sensitivity to light or sound?
+Patient: Some sensitivity to bright light, yes. No vomiting though, and no nausea really.
+Doctor: Have you noticed any visual changes, weakness, numbness, or difficulty speaking?
+Patient: No, nothing like that. Just the headache and feeling really tired all the time.
+Doctor: You mentioned sleep. Tell me more about that.
+Patient: I fall asleep okay, but I keep waking up around three in the morning and I can't get back to sleep. I lie there for an hour or two. It's been like this for over a month.
+Doctor: Do you feel rested when you wake up in the morning?
+Patient: Not at all. I feel exhausted, like I never slept. I've been relying on coffee to get through the day, maybe four or five cups.
+Doctor: That's quite a lot of caffeine, and drinking it late can worsen the sleep problem. Have you been feeling stressed or anxious lately?
+Patient: Yes, actually. Work has been really demanding. I've had a lot of deadlines and I've been worrying constantly, even at home. My chest feels tight sometimes and my heart races.
+Doctor: Do those episodes of a racing heart come with any shortness of breath, dizziness, or a feeling of dread?
+Patient: Sometimes shortness of breath, and yes, a sense of dread. It usually passes after ten or fifteen minutes.
+Doctor: That sounds like it could be anxiety, possibly panic episodes. We'll explore that. Let's cover your past medical history. Do you have any ongoing conditions?
+Patient: I was told two years ago that I have high blood pressure. I'm supposed to take medication for it.
+Doctor: Which medication, and are you taking it regularly?
+Patient: It's amlodipine, five milligrams. But I'll be honest, I forget it quite often, maybe half the time.
+Doctor: Consistency really matters with blood pressure control. Any other medications, supplements, or allergies?
+Patient: No allergies. I take a multivitamin sometimes. That's it.
+Doctor: Any family history of heart disease, stroke, or diabetes?
+Patient: My father had a heart attack in his late fifties. My mother has diabetes.
+Doctor: Thank you. Do you smoke, and how much alcohol do you drink?
+Patient: I don't smoke. I drink a couple of beers on the weekend, nothing during the week.
+Doctor: Okay. Let me check a few things. I'm going to take your blood pressure now. Your reading today is one hundred and fifty-two over ninety-four, which is elevated. Your pulse is a little fast at ninety-two.
+Patient: Is that bad?
+Doctor: It's higher than we'd like, and it fits with the missed medication and the stress. Let me listen to your heart and lungs. Take a deep breath for me. Your heart sounds regular and your lungs are clear.
+Doctor: Based on everything, here's my assessment. The headaches are most likely tension-type, driven by stress, poor sleep, and possibly your uncontrolled blood pressure. The early morning waking and daytime exhaustion point to a sleep disturbance, likely worsened by anxiety and caffeine. And you're describing symptoms consistent with anxiety, including possible panic episodes.
+Patient: That makes sense when you put it all together.
+Doctor: For the plan: first, let's get you taking the amlodipine every day, consistently. I'd like you to monitor your blood pressure at home and keep a log. Second, reduce caffeine to one cup in the morning and none after midday. Third, I'll refer you for cognitive behavioural therapy to help with the anxiety and sleep, and we can discuss medication if needed. Let's also arrange some blood tests to check your kidney function and cholesterol.
+Patient: Okay, I can do that. Should I be worried about the headaches?
+Doctor: Given there are no red flag features like sudden severe onset, weakness, or visual loss, I'm reassured they're tension-type. But if you develop any of those, or the headache suddenly becomes the worst of your life, seek urgent care immediately.
+Patient: Understood. Thank you, doctor.
+Doctor: We'll review in four weeks to check your blood pressure and see how the sleep and anxiety are responding. Take care.

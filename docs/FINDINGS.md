@@ -122,3 +122,116 @@ login flow needs a per-platform implementation.
 3. Wire CI with `xa11y/setup-a11y` once the suite is green locally.
 4. Expand coverage feature-by-feature, mirroring the cua-driver suite's matrix
    (connection, onboarding, recording, firmware, sessions).
+
+---
+
+## POC: recording → note generation (Linear APP-7808)
+
+A focused POC to answer "can xa11y drive the real recording + note-generation
+flow end-to-end", for comparison against the WDIO true-app POC.
+
+### Scenario proven
+
+`login → new session → start recording → wait ~30s → stop → note generation`
+
+Ran green locally, **four cases**:
+
+- `test_record_stop_note_generation` — core ticket scenario (structural): the
+  recording timer advances, stop works, and note generation starts.
+- `test_record_transcribes_spoken_content` — **true end-to-end** (30s): a fixed
+  spoken consult is injected via BlackHole and the transcript is asserted to
+  contain the spoken content. **100% keyword match.**
+- `test_record_5min_session` — 5-min real consult. **100% (38/38).**
+- `test_record_10min_session` — 10-min real consult. **92.2% (59/64)** — the
+  few misses (racing/cholesterol/father/smoke/moisturiser) are spoken words the
+  ASR/summary dropped; well above the 0.9 bar.
+
+**Proof the audio→transcript loop actually works.** Injecting real consult
+audio produces a transcript that matches the spoken content near word-for-word;
+accuracy is asserted against the verbatim Transcript tab (not the summarised
+SOAP note, which normalises/omits spoken words). The 0.9 threshold sits right:
+100% on clean short/medium runs, 92% on the long one — tolerant of ASR variance
+without going lax.
+
+### Selectors discovered (all stable role+name, no coordinates)
+
+| Control | Selector | Notes |
+|---|---|---|
+| Start recording | `button[name*='Transcribe']` | full name: "Transcribe Open transcription mode menu"; doubles as start |
+| Recording timer | `static_text` value `mm:ss` | polled to prove liveness (00:00 → 00:16) |
+| While recording | `button[name='Pause transcribing']`, `button[name='End recording']` | only present mid-recording |
+| Stop | `button[name='End recording']` | |
+| Note generation started | `static_text[value*='Analyzing transcript']`, `button[name='Stop generating']` | appears immediately after stop |
+| Transcript available | `button[name='Transcript']` (new tab) | tab_group gains this after capture |
+
+Discovered by walking the flow with `scripts/probe_recording.py` and reading
+`reports/rec_*.txt` — never guessed.
+
+### Note-generation assertion (scope: "starts or completes")
+
+Per the ticket we assert generation **starts** (the "Analyzing transcript" /
+"Stop generating" markers, or the Transcript tab appearing) rather than
+matching exact note text. Structural, non-empty checks — robust to content
+variation.
+
+For the true end-to-end test we go further and check **transcription accuracy
+against a threshold** rather than exact text. Transcription + LLM summarisation
+are non-deterministic, so we measure `matched_keywords / total_keywords` and
+require it to clear a bar (default **40%**, override via
+`TRANSCRIPT_MATCH_THRESHOLD`). In practice the injected 30s consult scores
+**100% (8/8 keywords)**, so 40% leaves generous headroom against flake while
+still catching a genuinely broken audio→transcript path.
+
+### Audio injection (BlackHole)
+
+Heidi only transcribes real mic audio. `lib/audio.py` + `tests/recording/
+conftest.py` route the system mic to a **BlackHole 2ch** loopback and loop a
+fixed `say`-generated consult clip (`assets/consult_30s.wav`) for the recording
+duration, then restore the original devices. If BlackHole isn't installed the
+fixture degrades to a no-op so the UI flow still runs (the flow reached note
+generation even with silent audio in testing).
+
+Setup: `scripts/setup_audio.sh` (installs `blackhole-2ch` + `switchaudio-osx`,
+regenerates the clip). **BlackHole needs sudo + a reboot** to register as a
+device — the one real setup-friction point.
+
+### Configurable duration
+
+`RECORD_SECONDS` env var controls recording length: default 30 (ticket),
+`RECORD_SECONDS=600` for a 10-minute long-session run. One code path, any
+duration. `test_record_note_generation.py` carries `timeout(300)` so a long run
+isn't killed by the global 120s cap.
+
+### POC assessment vs ticket criteria
+
+| Criterion | Result |
+|---|---|
+| xa11y drives the real app | ✅ launched/attached and drove the full flow |
+| Attempts login → record → stop → note-gen | ✅ all four stages exercised, green |
+| No secrets committed/logged | ✅ password in gitignored `.env.e2e`; nothing logged |
+| Findings sufficient vs WDIO | ✅ selectors, runtime, flake, setup captured below |
+
+- **Setup friction:** low, except BlackHole's sudo+reboot. Everything else is
+  `pip install -e .` + macOS permissions.
+- **Selector/API ergonomics:** excellent — the recording controls have clean,
+  stable accessible names; Playwright-style `wait_visible` removed all sleeps
+  from the control logic.
+- **Runtime:** ~30s for the 30s scenario (dominated by the recording wait
+  itself), negligible framework overhead.
+- **Flake risk:** two real hazards found. (1) The AX tree momentarily collapses
+  to a stub during the new-session view transition (observed: 54-char tree) —
+  poll `web_area` visible before acting; the Page Object `wait_visible` guards
+  cover this. (2) **The AX tree is EMPTY whenever the Heidi window is not
+  foreground** (backgrounded WKWebView stops publishing AX) — the runner must
+  keep Heidi frontmost; the harness calls `osascript ... activate` before runs.
+- **BlackHole setup gotcha:** after `brew install blackhole-2ch` the device may
+  not appear until coreaudiod is reloaded — `sudo killall coreaudiod` (needs a
+  real terminal for the password; SIP blocks the non-sudo `launchctl kickstart`).
+  Verify with `system_profiler SPAudioDataType | grep -i BlackHole`.
+- **Debuggability:** stage dumps (`reports/rec_*.txt`) + per-test video +
+  failure screenshots make it easy to see exactly where a run diverged.
+
+**Recommendation: adopt** for recording E2E. The flow is fully drivable via
+stable selectors; the only nontrivial dependency is the BlackHole audio harness,
+which is a one-time setup and cleanly isolated in `lib/audio.py`.
+
