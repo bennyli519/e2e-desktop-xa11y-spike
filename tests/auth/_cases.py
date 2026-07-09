@@ -13,7 +13,7 @@ import pytest
 import xa11y
 
 from _flow import LoginResult, run_email_password_login
-from lib.login import is_logged_in, is_on_login_page
+from lib.login import get_credentials, is_logged_in, is_on_login_page
 from pages import AuthPage
 
 
@@ -38,7 +38,11 @@ def require_login_screen(app: xa11y.App, what: str) -> AuthPage:
     page = AuthPage(app)
     if is_logged_in(app):
         if os.environ.get("AUTH_KEEP_SESSION") != "1":
-            page.sign_out()
+            try:
+                email, _ = get_credentials()
+            except Exception:
+                email = None
+            page.sign_out(email=email)
             time.sleep(2.0)
         if is_logged_in(app):
             pytest.skip(

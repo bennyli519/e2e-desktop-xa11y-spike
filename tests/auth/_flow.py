@@ -110,7 +110,11 @@ def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
         # which is a false pass for an OAuth test. Set AUTH_KEEP_SESSION=1 to
         # skip the sign-out (fast iteration / when sign_out selectors need work).
         if os.environ.get("AUTH_KEEP_SESSION") != "1" and is_logged_in(heidi_app):
-            AuthPage(heidi_app).sign_out()
+            try:
+                _email, _ = get_credentials()
+            except Exception:
+                _email = None
+            AuthPage(heidi_app).sign_out(email=_email)
             time.sleep(2.0)
 
         if is_logged_in(heidi_app):
