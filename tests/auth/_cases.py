@@ -37,18 +37,17 @@ def require_login_screen(app: xa11y.App, what: str) -> AuthPage:
     """
     page = AuthPage(app)
     if is_logged_in(app):
-        if os.environ.get("AUTH_KEEP_SESSION") != "1":
-            try:
-                email, _ = get_credentials()
-            except Exception:
-                email = None
-            page.sign_out(email=email)
-            time.sleep(2.0)
-        if is_logged_in(app):
-            pytest.skip(
-                f"Still logged in (sign-out failed or AUTH_KEEP_SESSION=1) — "
-                f"cannot test the {what} entry point"
-            )
+        # The account-menu Log out is a React portal popover invisible to the
+        # AX tree, so we can't sign out through the UI here. Token-clear +
+        # relaunch (as TCD001 does) would invalidate this test's app handle, so
+        # for the entry-point cases we simply require a logged-out start: run
+        # TCD001 first (it clears the token), or launch the app logged out.
+        pytest.skip(
+            f"Logged in — the account-menu Log out isn't AX-accessible, so we "
+            f"can't sign out in-place for the {what} entry point. Run "
+            f"tests/auth/test_tcd001_login_email_password.py first (it clears "
+            f"the token), or start Heidi logged out."
+        )
     if not is_on_login_page(app):
         pytest.skip(f"Not on the login page — cannot test the {what} entry point")
     return page

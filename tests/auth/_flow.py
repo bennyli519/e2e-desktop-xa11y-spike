@@ -69,6 +69,30 @@ class LoginResult:
 FLOW_RESULTS: dict[str, LoginResult] = {}
 
 
+def _reattach_after_relaunch(timeout: float = 40.0) -> "xa11y.App | None":
+    """Re-attach to Heidi after a token-clear relaunch and wait for readiness.
+
+    The app was quit + reopened, so the old handle's pid is dead. Poll by name
+    until the web_area is up (login screen renders there too).
+    """
+    import time as _t
+
+    deadline = _t.time() + timeout
+    last_err = None
+    while _t.time() < deadline:
+        for name in ("Heidi(Staging)", "Heidi"):
+            try:
+                app = xa11y.App.by_name(name, timeout=2.0)
+                app.locator("web_area").wait_visible(timeout=10.0)
+                return app
+            except Exception as e:
+                last_err = e
+                continue
+        _t.sleep(2.0)
+    print(f"[auth _flow] re-attach after relaunch failed: {last_err!r}")
+    return None
+
+
 def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
     """Run ONE full email+password (TCD001) login flow, step by step.
 
@@ -103,19 +127,20 @@ def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
         )
 
     try:
-        # Auth tests need a LOGGED-OUT precondition (the login screen). By
-        # default we sign out first so the full fresh flow (email -> Auth0 ->
-        # password -> redirect) is genuinely exercised — otherwise the
-        # persisted token leaves us already logged in and the login STEPS skip,
-        # which is a false pass for an OAuth test. Set AUTH_KEEP_SESSION=1 to
-        # skip the sign-out (fast iteration / when sign_out selectors need work).
+        # Auth tests need a LOGGED-OUT precondition (the login screen). The
+        # account menu (Log out) is a React portal popover invisible to the AX
+        # tree, so we CANNOT drive Log out through the UI. Instead we clear the
+        # persisted Auth0 token + relaunch (mirrors dispatch.auth.logout()).
+        # Set AUTH_KEEP_SESSION=1 to skip this (fast iteration).
         if os.environ.get("AUTH_KEEP_SESSION") != "1" and is_logged_in(heidi_app):
-            try:
-                _email, _ = get_credentials()
-            except Exception:
-                _email = None
-            AuthPage(heidi_app).sign_out(email=_email)
-            time.sleep(2.0)
+            from lib.logout import force_logout_via_token
+            force_logout_via_token()
+            # The app was relaunched — re-attach by name and wait for the login
+            # screen. The old handle's pid is dead now.
+            heidi_app = _reattach_after_relaunch()
+            if heidi_app is None:
+                res.error = "app did not come back after token-clear relaunch"
+                return res
 
         if is_logged_in(heidi_app):
             res.already_logged_in = True
