@@ -13,8 +13,9 @@ one visible test per assertion (recording starts / timer advances / transcript
 generated / note generated / transcript accuracy). That gives a natural
 checklist in the pytest output and the HTML report.
 
-Audio is injected via BlackHole (see lib/audio.py + scripts/setup_audio.sh).
-Without BlackHole the structural checks (start/timer/note-started) still run and
+Audio is injected via the platform's virtual audio device (macOS BlackHole /
+Windows VB-CABLE — see lib/audio.py + scripts/setup_audio.sh). Without it the
+structural checks (start/timer/note-started) still run and
 the content checks skip cleanly.
 
 Run from Ghostty (needs Accessibility + Screen Recording), logged in, Heidi

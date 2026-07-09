@@ -29,6 +29,23 @@ results, and how to wire it into CI / release.
 Steps 3, 6, 7, 9 are automated by **`sh scripts/setup_audio.sh`** (it still
 needs your password for BlackHole and a reboot afterwards).
 
+### Cross-platform: same tests, macOS + Windows
+
+The recording tests (`tests/recording/`) are **platform-agnostic** — identical
+test cases, identical wav clips, identical assertions. Only *how audio reaches
+Heidi's mic* differs, and that's fully hidden inside `lib/audio.py`'s
+`AudioInjector`:
+
+| | Virtual device | How the clip is injected | Heidi input |
+|---|---|---|---|
+| **macOS** | BlackHole 2ch | route system default I/O to BlackHole, `afplay` the clip | system default (auto) |
+| **Windows** | VB-CABLE | miniaudio plays into "CABLE Input" (`scripts/play_audio_to_device.py`) | UI-selects "CABLE Output" |
+
+On Windows: install [VB-CABLE](https://vb-audio.com/Cable/) and
+`pip install -e ".[windows]"` (pulls miniaudio). No per-test change — the same
+`pytest tests/recording/` runs on both OSes; on a box without the virtual
+device the structural checks still run and content checks skip.
+
 ### Fastest path: one-shot bootstrap
 
 `bash scripts/bootstrap.sh` does everything scriptable in one go:

@@ -63,8 +63,8 @@ def check_timer_advances(res: RecordingResult) -> None:
 def check_transcription_generated(res: RecordingResult) -> None:
     _no_flow_error(res)
     if not res.audio_injected:
-        pytest.skip(f"[{res.flow}] no BlackHole audio injected — content check "
-                    f"needs real audio (run scripts/setup_audio.sh + reboot)")
+        pytest.skip(f"[{res.flow}] no virtual audio injected — content check "
+                    f"needs BlackHole (macOS) / VB-CABLE (Windows)")
     assert res.transcript.strip(), (
         f"[{res.flow}] transcript is empty — audio->text path produced nothing"
     )
@@ -76,7 +76,7 @@ def check_note_generated(res: RecordingResult) -> None:
         f"[{res.flow}] note generation never started after stopping"
     )
     if not res.audio_injected:
-        pytest.skip(f"[{res.flow}] no BlackHole audio injected — note body "
+        pytest.skip(f"[{res.flow}] no virtual audio injected — note body "
                     f"needs real audio")
     # Per Benny 2026-07: note is asserted NON-EMPTY only (SOAP note normalises
     # spoken words, so keyword accuracy on it is intentionally not gated).
@@ -113,7 +113,7 @@ def check_duration_display(res: RecordingResult) -> None:
 def check_transcript_accuracy(res: RecordingResult) -> None:
     _no_flow_error(res)
     if not res.audio_injected:
-        pytest.skip(f"[{res.flow}] no BlackHole audio injected — accuracy check "
+        pytest.skip(f"[{res.flow}] no virtual audio injected — accuracy check "
                     f"needs real audio")
     acc = res.transcript_accuracy
     print(
