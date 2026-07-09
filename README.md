@@ -134,17 +134,16 @@ Windows when those devices are present. Override the device name only when your
 local virtual device is named differently:
 
 ```bash
-HEIDI_E2E_RECORDING_INPUT_DEVICE="BlackHole 2ch" pytest tests/scribe/test_recording.py -v -s
+HEIDI_E2E_RECORDING_INPUT_DEVICE="BlackHole 2ch" pytest tests/recording/test_30s.py -v -s
 ```
 
-On Windows, the test can also start an audio fixture while recording. Playback
+On Windows, the test plays the flow's audio fixture while recording. Playback
 defaults to the first output matching `CABLE Input`; override only if needed:
 
 ```powershell
 $env:HEIDI_E2E_RECORDING_INPUT_DEVICE = "CABLE Output (VB-Audio Virtual Cable)"
 $env:HEIDI_E2E_AUDIO_PLAYBACK_DEVICE = "CABLE Input"
-$env:HEIDI_E2E_AUDIO_FIXTURE = "C:\path\to\sample.wav"
-.\.venv\Scripts\python.exe -m pytest tests\scribe\test_recording.py -v -s
+.\.venv\Scripts\python.exe -m pytest tests\recording\test_30s.py -v -s
 ```
 
 VB-CABLE setup:
@@ -173,33 +172,26 @@ HEIDI_E2E_RECORDING_INPUT_DEVICE="CABLE Output (VB-Audio Virtual Cable)"
 HEIDI_E2E_AUDIO_PLAYBACK_DEVICE="CABLE Input (VB-Audio Virtual Cable)"
 ```
 
-For non-WAV fixtures or custom routing, set `HEIDI_E2E_AUDIO_PLAY_CMD` with
-`{file}` as the placeholder for the fixture path.
-
 Short and long note-generation runs mirror the web/macOS recording specs:
 
 ```powershell
 $env:HEIDI_E2E_RECORDING_INPUT_DEVICE = "CABLE Output (VB-Audio Virtual Cable)"
 $env:HEIDI_E2E_AUDIO_PLAYBACK_DEVICE = "CABLE Input"
 
-# Short transcribe recording: records test.wav for 45s, then verifies transcript + note content.
+# 30s recording: records consult_30s.wav, then verifies transcript + note content.
 .\.venv\Scripts\python.exe -m pytest `
-  tests\scribe\test_recording.py::test_transcribe_short_audio_generates_note -v -s
+  tests\recording\test_30s.py -v -s
 
-# Short dictation recording: records test.wav for 45s, then verifies transcript + note content.
+# 1-minute recording: records consult_1min.wav, then verifies transcript + note content.
 .\.venv\Scripts\python.exe -m pytest `
-  tests\scribe\test_recording.py::test_dictate_short_audio_generates_note -v -s
+  tests\recording\test_1min.py -v -s
 
-# Long recording: records longscribe.mp3 in real time (~25 min), then verifies note.
-$env:HEIDI_E2E_RUN_LONG_RECORDING = "1"
+# Longer stress runs.
 .\.venv\Scripts\python.exe -m pytest `
-  tests\scribe\test_recording.py::test_transcribe_long_audio_generates_note -v -s
+  tests\recording\test_5min.py tests\recording\test_10min.py -v -s
 ```
 
-Fixture lookup defaults to a sibling `scribe-fe-v2/packages/e2e-utils/test-files`
-checkout. Override with `HEIDI_E2E_FIXTURE_ROOT`,
-`HEIDI_E2E_SHORT_AUDIO_FIXTURE`, `HEIDI_E2E_DICTATION_AUDIO_FIXTURE`, or
-`HEIDI_E2E_LONG_AUDIO_FIXTURE`.
+Recording fixtures live in this repo under `assets/consult_*.wav`.
 
 - **`HEIDI_DEV=1`** — for local dev. Start `pnpm tauri:dev` yourself first; the
   suite only attaches (never launches it). Binary path defaults to

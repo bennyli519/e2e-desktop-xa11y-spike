@@ -1,8 +1,8 @@
 """One-shot: record with real audio injected via BlackHole, dump transcript.
 
-Feeds assets/consult_30s.wav into Heidi's mic through BlackHole, records ~30s,
-stops, waits for note generation, then dumps the tree so we can see where the
-transcript text actually lives in the AX tree.
+Feeds assets/consult_30s.wav into Heidi's mic through the configured virtual
+audio device, records ~30s, stops, waits for note generation, then dumps the
+tree so we can see where the transcript text actually lives in the AX tree.
 
 Run from Ghostty, Heidi logged in + foreground:
     PYTHONPATH=. .venv/bin/python3.14 scripts/probe_transcript.py
@@ -13,7 +13,7 @@ from pathlib import Path
 import xa11y
 
 from lib import audio
-from pages import RecordingPage
+from pages import ScribePage
 from pages.sidebar import Sidebar
 
 REPORTS = Path(__file__).resolve().parent.parent / "reports"
@@ -23,30 +23,34 @@ SECONDS = 30
 
 def main() -> int:
     app = xa11y.App.by_name("Heidi", timeout=10)
-    print(f"connected pid={app.pid}, blackhole={audio.blackhole_available()}")
+    print(
+        f"connected pid={app.pid}, "
+        f"virtual_audio={audio.virtual_audio_available()}, "
+        f"input={audio.input_device_name()}"
+    )
 
     sb = Sidebar(app)
     sb.reset_to_scribe()
     assert sb.new_session(), "could not start new session"
-    rec = RecordingPage(app)
+    rec = ScribePage(app)
 
     rec.start_recording()
     print("recording started:", rec.is_recording())
 
-    router = audio.AudioRouter()
-    router.__enter__()
-    print("routed I/O to BlackHole; current input:",
-          audio._get_device("input"))
-    player = audio.play_clip(CLIP, SECONDS)
-    print(f"playing {CLIP.name} for {SECONDS}s...")
+    injector = audio.AudioInjector(app)
+    injected = injector.prepare()
+    if injected:
+        injector.play(CLIP, SECONDS)
+        print(f"playing {CLIP.name} for {SECONDS}s...")
+    else:
+        print("virtual audio unavailable; recording without fixture injection")
 
     t0 = rec.recording_timer()
     time.sleep(SECONDS)
     t1 = rec.recording_timer()
     print(f"timer {t0} -> {t1}")
 
-    audio.stop_clip(player)
-    router.__exit__(None, None, None)
+    injector.cleanup()
     print("audio stopped, devices restored")
 
     rec.stop_recording()

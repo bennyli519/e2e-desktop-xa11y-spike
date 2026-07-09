@@ -34,8 +34,7 @@ import xa11y
 
 from lib import audio
 from lib.login import is_logged_in
-from pages import RecordingPage
-from pages.sidebar import Sidebar
+from pages import ScribePage
 
 ASSETS = Path(__file__).resolve().parent.parent.parent / "assets"
 
@@ -121,35 +120,39 @@ FLOW_RESULTS: dict[str, RecordingResult] = {}
 # ---------------------------------------------------------------------------
 # Flow helpers
 # ---------------------------------------------------------------------------
-def _timer_to_seconds(mmss: str | None) -> int | None:
-    if not mmss or ":" not in mmss:
+def _timer_to_seconds(timer: str | None) -> int | None:
+    if not timer or ":" not in timer:
         return None
     try:
-        m, s = mmss.split(":")
-        return int(m) * 60 + int(s)
+        parts = [int(part) for part in timer.split(":")]
     except ValueError:
         return None
+    if len(parts) == 2:
+        m, s = parts
+        return m * 60 + s
+    if len(parts) == 3:
+        h, m, s = parts
+        return h * 3600 + m * 60 + s
+    return None
 
 
-def _reach_fresh_session(heidi_app: xa11y.App) -> RecordingPage:
+def _reach_fresh_session(heidi_app: xa11y.App) -> ScribePage:
     """Open a brand-new Scribe session, tolerating a dirty prior state."""
     if not is_logged_in(heidi_app):
         pytest.skip("Not logged in — run tests/auth/test_login.py first")
-    sidebar = Sidebar(heidi_app)
-    rec = RecordingPage(heidi_app)
+    rec = ScribePage(heidi_app)
 
     last_err = None
     for attempt in range(4):
         try:
             # A previous flow may have left a session recording — end it first.
-            end = heidi_app.locator("button[name='End recording']")
-            if end.exists():
-                end.press()
+            if rec.is_recording():
+                rec.stop_recording()
                 time.sleep(3.0)
-            sidebar.reset_to_scribe()
+            rec.open()
             time.sleep(1.0)
             heidi_app.locator("button[name='New session']").wait_visible(timeout=10.0)
-            if sidebar.new_session():
+            if rec.new_session():
                 heidi_app.locator("button[name*='Transcribe']").wait_visible(timeout=10.0)
                 return rec
             last_err = f"new_session() returned False (attempt {attempt + 1})"

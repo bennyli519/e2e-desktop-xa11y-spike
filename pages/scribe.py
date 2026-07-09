@@ -1,10 +1,22 @@
 """Page Object: Scribe page (main note-taking view)."""
+import re
 import time
 
 import xa11y
 
 from lib import click_first_match
 from pages.sidebar import Sidebar
+
+GENERATING_MARKERS = [
+    "static_text[value*='Analyzing transcript']",
+    "button[name='Stop generating']",
+    "static_text[value*='Generating']",
+]
+
+GENERATION_DONE_ABSENT = [
+    "button[name='Stop generating']",
+    "static_text[value*='Analyzing transcript']",
+]
 
 
 class ScribePage:
@@ -39,7 +51,95 @@ class ScribePage:
     def has_prep_button(self) -> bool:
         return self.app.locator("button[name='Prepare']").exists()
 
+    def selected_input_device(self) -> str | None:
+        combo = self._input_device_combo()
+        if combo is None:
+            return None
+        return combo.value or combo.name
+
+    def recording_elapsed_seconds(self) -> int | None:
+        elapsed = [
+            seconds
+            for _, seconds in self._timer_texts()
+        ]
+        return max(elapsed) if elapsed else None
+
+    def recording_timer(self) -> str | None:
+        timers = self._timer_texts()
+        if not timers:
+            return None
+        return max(timers, key=lambda item: item[1])[0]
+
+    def is_recording(self) -> bool:
+        return any(
+            self.app.locator(selector).exists()
+            for selector in [
+                "button[name='End recording']",
+                "button[name='End transcribing']",
+                "button[name='End dictating']",
+                "button[name*='End recording']",
+                "button[name*='End transcribing']",
+                "button[name*='End dictating']",
+            ]
+        )
+
+    def duration_display(self) -> str | None:
+        return self.recording_timer()
+
+    def note_generation_started(self) -> bool:
+        return any(self.app.locator(sel).exists() for sel in GENERATING_MARKERS)
+
+    def note_generation_done(self) -> bool:
+        still_going = any(
+            self.app.locator(sel).exists() for sel in GENERATION_DONE_ABSENT
+        )
+        return (not still_going) and bool(self.note_text().strip())
+
+    def has_transcript_tab(self) -> bool:
+        return self.app.locator("button[name='Transcript']").exists()
+
+    def open_tab(self, name: str) -> bool:
+        return self._activate_tab(name)
+
+    def transcript_text(self) -> str:
+        self.open_tab("Transcript")
+        return self._body_text()
+
+    def note_text(self) -> str:
+        self.open_tab("Note")
+        return self._body_text()
+
+    def _timer_texts(self) -> list[tuple[str, int]]:
+        timers: list[tuple[str, int]] = []
+        for el in self.app.locator("static_text").elements():
+            text = el.name or el.value or ""
+            match = re.fullmatch(r"(?:(\d{1,2}):)?(\d{1,2}):(\d{2})", text)
+            if not match:
+                continue
+            hours = int(match.group(1) or 0)
+            minutes = int(match.group(2))
+            seconds = int(match.group(3))
+            timers.append((text, hours * 3600 + minutes * 60 + seconds))
+        return timers
+
     # --- actions ---
+    def new_session(self) -> bool:
+        self.dismiss_open_overlays()
+        ok = self.sidebar.new_session()
+        if ok:
+            self.app.locator(
+                "button[name='Transcribe'], button[name='Dictate']"
+            ).wait_visible(timeout=20.0)
+            self.dismiss_open_overlays()
+        return ok
+
+    def dismiss_open_overlays(self) -> None:
+        try:
+            xa11y.input_sim().press("Escape")
+            time.sleep(0.3)
+        except Exception:
+            pass
+
     def type_note(self, text: str) -> None:
         """Focus the note area and type via real keystrokes (webview-safe)."""
         ta = self.note_input()
@@ -118,6 +218,9 @@ class ScribePage:
         time.sleep(1)
         return clicked and matches_device(self.selected_input_device())
 
+    def select_input_heidi_remote(self) -> bool:
+        return self.select_input_device("Heidi Remote")
+
     def start_transcribing(self) -> None:
         self.select_recording_mode("Transcribe")
         self.app.locator("button[name='Transcribe']").wait_visible(timeout=20.0)
@@ -143,6 +246,9 @@ class ScribePage:
         self.app.locator(
             "button[name*='Pause dictating'], button[name*='End recording']"
         ).wait_visible(timeout=20.0)
+
+    def start_recording(self) -> None:
+        self.start_transcribing()
 
     def select_recording_mode(self, mode: str) -> bool:
         if self.app.locator(f"button[name='{mode}']").exists():
@@ -189,6 +295,45 @@ class ScribePage:
             time.sleep(1)
         return False
 
+    def wait_recording(self, seconds: float, sample_every: float = 30.0) -> list:
+        samples: list = []
+        start = time.time()
+        samples.append((0.0, self.recording_timer()))
+        next_sample = sample_every
+        while True:
+            elapsed = time.time() - start
+            if elapsed >= seconds:
+                break
+            time.sleep(2)
+            if elapsed >= next_sample:
+                samples.append((round(elapsed), self.recording_timer()))
+                next_sample += sample_every
+        samples.append((round(time.time() - start), self.recording_timer()))
+        return samples
+
+    def pause_recording(self) -> bool:
+        return click_first_match(
+            self.app,
+            [
+                "button[name='Pause transcribing']",
+                "button[name='Pause dictating']",
+                "button[name*='Pause transcribing']",
+                "button[name*='Pause dictating']",
+            ],
+        )
+
+    def resume_recording(self) -> bool:
+        return click_first_match(
+            self.app,
+            [
+                "button[name='Resume']",
+                "button[name='Resume transcribing']",
+                "button[name='Resume dictating']",
+                "button[name*='Resume transcribing']",
+                "button[name*='Resume dictating']",
+            ],
+        )
+
     def end_recording(self) -> bool:
         ok = click_first_match(
             self.app,
@@ -204,6 +349,26 @@ class ScribePage:
         if ok:
             time.sleep(2)
         return ok
+
+    def stop_recording(self) -> None:
+        if not self.end_recording():
+            raise AssertionError("Could not find an End recording control")
+
+    def wait_note_generation(self, timeout: float = 60.0) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.note_generation_started() or self.has_transcript_tab():
+                return True
+            time.sleep(1)
+        return False
+
+    def wait_note_complete(self, timeout: float = 150.0) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.note_generation_done():
+                return True
+            time.sleep(3)
+        return False
 
     def click_create_note_if_available(self) -> bool:
         if self.is_generating_note():
@@ -353,6 +518,19 @@ class ScribePage:
                 continue
             chunks.append(text)
         return "\n".join(chunks)
+
+    def _body_text(self) -> str:
+        parts: list[str] = []
+        for el in self.app.locator("static_text").elements():
+            text = (el.name or el.value or "").strip()
+            if len(text) < 15:
+                continue
+            if "Medical knowledge only" in text:
+                continue
+            if "Skip to" in text:
+                continue
+            parts.append(text)
+        return "\n".join(parts)
 
     def _input_device_combo(self):
         candidates = []

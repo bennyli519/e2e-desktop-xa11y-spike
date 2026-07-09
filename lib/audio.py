@@ -26,6 +26,7 @@ Requires (install once, see scripts/setup_audio.sh):
 On a machine without the virtual device, `prepare()` returns False and the
 structural checks still run while content checks skip.
 """
+import os
 import subprocess
 import sys
 import time
@@ -35,10 +36,14 @@ from lib.platform_utils import IS_MAC, IS_WINDOWS
 
 BLACKHOLE_NAME = "BlackHole 2ch"
 # The device Heidi RECORDS from, per platform.
-MAC_INPUT_DEVICE = BLACKHOLE_NAME
-WINDOWS_INPUT_DEVICE = "CABLE Output"
+MAC_INPUT_DEVICE = os.environ.get("HEIDI_E2E_RECORDING_INPUT_DEVICE", BLACKHOLE_NAME)
+WINDOWS_INPUT_DEVICE = os.environ.get(
+    "HEIDI_E2E_RECORDING_INPUT_DEVICE", "CABLE Output"
+)
 # The device we PLAY the clip INTO on Windows (VB-CABLE's playback side).
-WINDOWS_PLAYBACK_DEVICE = "CABLE Input"
+WINDOWS_PLAYBACK_DEVICE = os.environ.get(
+    "HEIDI_E2E_AUDIO_PLAYBACK_DEVICE", "CABLE Input"
+)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -54,14 +59,14 @@ def _switch_audio_path() -> str | None:
 
 
 def blackhole_available() -> bool:
-    """True only if both SwitchAudioSource and the BlackHole device exist."""
+    """True only if both SwitchAudioSource and the configured virtual device exist."""
     if _switch_audio_path() is None:
         return False
     try:
         out = subprocess.run(
             ["SwitchAudioSource", "-a"], capture_output=True, text=True, timeout=5
         ).stdout
-        return BLACKHOLE_NAME in out
+        return MAC_INPUT_DEVICE in out
     except Exception:
         return False
 
@@ -127,8 +132,8 @@ class AudioRouter:
     def __enter__(self) -> "AudioRouter":
         self._orig_input = _get_device("input")
         self._orig_output = _get_device("output")
-        _set_device("input", BLACKHOLE_NAME)
-        _set_device("output", BLACKHOLE_NAME)
+        _set_device("input", MAC_INPUT_DEVICE)
+        _set_device("output", MAC_INPUT_DEVICE)
         time.sleep(0.5)  # let CoreAudio settle on the new default devices
         return self
 
@@ -182,9 +187,11 @@ def stop_clip(proc: subprocess.Popen) -> None:
     if IS_WINDOWS:
         subprocess.run(
             ["powershell", "-NoProfile", "-Command",
-             "Get-Process python* -ErrorAction SilentlyContinue "
-             "| Where-Object {$_.CommandLine -like '*play_audio_to_device*'} "
-             "| Stop-Process -Force -ErrorAction SilentlyContinue"],
+             "Get-CimInstance Win32_Process "
+             "| Where-Object {$_.CommandLine -like '*play_audio_to_device.py*'} "
+             "| ForEach-Object { "
+             "Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue "
+             "}"],
             capture_output=True,
         )
     else:

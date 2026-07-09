@@ -21,7 +21,7 @@ import pytest
 import xa11y
 
 from lib.login import is_logged_in
-from pages import DevicePage, RecordingPage
+from pages import DevicePage, ScribePage
 from pages.sidebar import Sidebar
 
 pytestmark = [pytest.mark.remote_session, pytest.mark.needs_device,
@@ -53,7 +53,7 @@ def test_remote_session_recording(remote_ready, heidi_app: xa11y.App):
     sidebar = Sidebar(heidi_app)
     sidebar.reset_to_scribe()
     assert sidebar.new_session(), "Could not start a New session"
-    rec = RecordingPage(heidi_app)
+    rec = ScribePage(heidi_app)
 
     # Select 'Heidi Remote' as the input so recording drives the device.
     # NOTE: the input-source trigger is an ICON-ONLY button with no accessible

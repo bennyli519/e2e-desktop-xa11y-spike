@@ -13,7 +13,7 @@ import time
 
 import xa11y
 
-from lib import click_first_match
+from lib import IS_WINDOWS, click_first_match
 
 
 class Sidebar:
@@ -63,6 +63,10 @@ class Sidebar:
         closed = False
         for _ in range(3):
             if not self.app.locator("button[name='Close']").exists():
+                break
+            # Windows UIA also exposes the app title-bar X as button "Close".
+            # Only click Close there when a real dialog/modal is present.
+            if IS_WINDOWS and not self.app.locator("dialog").exists():
                 break
             if click_first_match(self.app, ["button[name='Close']"]):
                 closed = True
