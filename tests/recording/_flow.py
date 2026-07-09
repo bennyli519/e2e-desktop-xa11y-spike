@@ -186,20 +186,20 @@ def run_recording_flow(
     if not clip_path.exists():
         pytest.skip(f"Clip missing: {clip_path} (run scripts/setup_audio.sh)")
 
-    router = None
-    proc = None
+    injector = audio.AudioInjector(heidi_app)
     try:
         rec = _reach_fresh_session(heidi_app)
+
+        # Prepare audio injection BEFORE recording starts. On Windows this
+        # selects Heidi's input device (must happen pre-record); on macOS it
+        # routes the system default I/O to BlackHole. Same call both places.
+        res.audio_injected = injector.prepare()
 
         rec.start_recording()
         res.recording_started = rec.is_recording()
 
-        # Route system I/O to BlackHole and play the clip as the mic signal.
-        if audio.blackhole_available():
-            router = audio.AudioRouter()
-            router.__enter__()
-            proc = audio.play_clip(clip_path, seconds)
-            res.audio_injected = True
+        if res.audio_injected:
+            injector.play(clip_path, seconds)
 
         res.timer_samples = rec.wait_recording(seconds, sample_every=60.0)
 
@@ -225,9 +225,6 @@ def run_recording_flow(
     except Exception as e:  # keep the result usable for reporting
         res.error = repr(e)
     finally:
-        if proc is not None:
-            audio.stop_clip(proc)
-        if router is not None:
-            router.__exit__(None, None, None)
+        injector.cleanup()
 
     return res

@@ -13,6 +13,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy"]
+# Windows audio injection routes a clip into VB-CABLE via miniaudio.
+windows = ["miniaudio>=1.59"]
 
 [tool.setuptools]
 # This is a test suite, not an importable package — don't auto-discover packages.
