@@ -45,6 +45,23 @@ discover the tree, write a spec, run it, read the result.
   fresh machine use a normal `.venv` (`pip install -e .`).
 - Heidi installed at `/Applications/Heidi.app`.
 - Test account: `bennyli9612@gmail.com` (password in `.env.e2e`, gitignored).
+
+## Test-account strategy (decided) — fixed account + per-run reset, NOT re-register
+
+Every run uses ONE fixed test account (above) and resets STATE at the start of
+each flow, rather than registering a fresh account each run. Rationale:
+- Sign-up needs email verification + a brand-new unused inbox every run (else
+  "email already registered"); its form is in the Auth0 browser (invisible to
+  AX); Auth0 rate-limits automated sign-ups.
+- A fresh account is EMPTY — no org/templates/team/paired device/pending
+  recordings — so Scribe/Evidence/device/bulk-sync cases have no data to test
+  and produce false skips/fails.
+- What we actually want is a CLEAN STATE, not a new account: each flow opens a
+  fresh session and cleans up dangling state (see recording's
+  `_reach_fresh_session`, which Ends a leftover recording first). Add a per-domain
+  `reset` fixture where isolation is needed; delete test data afterwards.
+- Registration (TCD014) is tested as its OWN standalone case, NOT as a
+  precondition for other tests.
 - Reference (old) framework cloned at `/tmp/Desktop-E2E-Test` during the spike
   — the cua-driver suite we ported structure/logic from. Source:
   https://github.com/bennyli519/Desktop-E2E-Test
