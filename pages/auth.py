@@ -148,33 +148,38 @@ class AuthPage:
         )
 
     # -- sign out (to force a fresh login run) ----------------------------
-    # Verified against the real UI (screenshot 2026-07-09): logout is NOT in
-    # Settings. The account row at the BOTTOM-LEFT (avatar + email) opens a
-    # popup with Team / Settings / Log out. So: press the footer account button
-    # (its AX name contains the signed-in email), then click "Log out".
+    # Verified against the real AX tree (2026-07-09): the account control is a
+    # COMBO_BOX at the bottom-left whose name contains the signed-in email:
+    #   combo_box name='b\n<email> ... <email>'
+    # Pressing it opens a menu with Team (link) / Settings (button) / Log out.
     LOGOUT_ITEM_SELECTORS = [
         "button[name='Log out']",
-        "menu_item[name='Log out']",
-        "link[name='Log out']",
         "button[name*='Log out']",
+        "menu_item[name='Log out']",
         "menu_item[name*='Log out']",
+        "link[name='Log out']",
+        "link[name*='Log out']",
         "static_text[value='Log out']",
+        "static_text[value*='Log out']",
+        # casing / wording fallbacks
+        "button[name*='Logout']",
+        "menu_item[name*='Logout']",
+        "button[name*='Sign out']",
     ]
 
     def _account_menu_selectors(self, email: str | None) -> list[str]:
-        """Selectors for the bottom-left account button that opens the menu.
+        """Selectors for the bottom-left account control that opens the menu.
 
-        The button's AX name shows the signed-in email, so match on it when we
-        know it; always include generic '@'-containing fallbacks.
+        Confirmed role is combo_box; keep button/static_text as fallbacks and
+        always include generic '@'-containing variants.
         """
         sels: list[str] = []
         if email:
-            sels += [
-                f"button[name*='{email}']",
-                f"static_text[value*='{email}']",
-            ]
-        # Generic fallbacks — any footer control whose label carries an email.
+            for role in ("combo_box", "button", "static_text"):
+                key = "value" if role == "static_text" else "name"
+                sels.append(f"{role}[{key}*='{email}']")
         sels += [
+            "combo_box[name*='@']",
             "button[name*='@']",
             "static_text[value*='@']",
         ]
@@ -186,10 +191,10 @@ class AuthPage:
     def sign_out(self, email: str | None = None) -> bool:
         """Best-effort sign out so a fresh login can be exercised.
 
-        Opens the bottom-left account menu (button labelled with the email),
+        Opens the bottom-left account menu (combo_box labelled with the email),
         then clicks "Log out". Returns True once the login field is back.
 
-        Pass the signed-in email to target the account button precisely; if
+        Pass the signed-in email to target the account control precisely; if
         omitted we fall back to any footer control whose label contains '@'.
         """
         # 1. Logout item might already be visible (menu left open).
@@ -198,18 +203,27 @@ class AuthPage:
             if self.has_login_field():
                 return True
 
-        # 2. Open the account menu, then click Log out.
+        # 2. Open the account menu ONCE, then click Log out. We must not press a
+        #    second account selector on failure — the control is a combo_box and
+        #    a second press TOGGLES the menu shut. So press the first matching
+        #    selector only, then attempt logout (with one settle-and-retry).
+        opened = False
         for sel in self._account_menu_selectors(email):
             try:
                 loc = self.app.locator(sel)
                 if not loc.exists():
                     continue
                 loc.press()
+                opened = True
+                break
+            except Exception:
+                continue
+
+        if opened:
+            for _ in range(3):  # menu (incl. Log out) may mount slightly late
                 time.sleep(1.0)
                 if self._click_logout_item():
                     time.sleep(2.0)
                     if self.has_login_field():
                         return True
-            except Exception:
-                continue
         return self.has_login_field()
