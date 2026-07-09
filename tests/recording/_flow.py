@@ -71,6 +71,16 @@ KEYWORDS_10MIN = KEYWORDS_5MIN + [
     "monofilament", "paracetamol", "diet",
 ]
 
+# 15min consult adds new topics on top of the 10min pool: low mood/depression,
+# acid reflux + night cough, alcohol/wine, cholesterol/kidney bloods, retinal
+# screening, and vaccinations.
+KEYWORDS_15MIN = KEYWORDS_10MIN + [
+    "depression", "mood", "reflux", "heartburn", "cough", "acid",
+    "alcohol", "wine", "cholesterol", "kidney", "retinal", "retinopathy",
+    "proton", "flu", "pneumococcal", "vaccination", "smoke", "burning",
+    "questionnaire", "posture",
+]
+
 
 # ---------------------------------------------------------------------------
 # Result container — one per flow, cached for all that flow's assertions.
