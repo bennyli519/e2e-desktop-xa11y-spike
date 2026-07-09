@@ -24,7 +24,7 @@ results, and how to wire it into CI / release.
 | 6 | **BlackHole 2ch** (virtual audio device) | Injects the fixed consult audio into Heidi's mic | `brew install blackhole-2ch` → **reboot** (or `sudo killall coreaudiod`) → verify `system_profiler SPAudioDataType \| grep -i BlackHole` |
 | 7 | **SwitchAudioSource** | Switches the default input/output to BlackHole and back | `brew install switchaudio-osx` |
 | 8 | **A logged-in Heidi session** | Skips the slow/fragile Auth0 flow for content tests | Log in once manually; the Auth0 token persists. Test account creds live in `.env.e2e` (gitignored) |
-| 9 | **Fixed consult audio** | The known input we assert against | `sh scripts/setup_audio.sh` regenerates `assets/consult_{30s,1min,5min,10min}.wav` |
+| 9 | **Fixed consult audio** | The known input we assert against | `sh scripts/setup_audio.sh` regenerates `assets/consult_{30s,1min,5min,10min,15min}.wav` |
 
 Steps 3, 6, 7, 9 are automated by **`sh scripts/setup_audio.sh`** (it still
 needs your password for BlackHole and a reboot afterwards).

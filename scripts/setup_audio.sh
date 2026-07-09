@@ -41,9 +41,11 @@ say -v Samantha -r 150 -f "$REPO/assets/consult_5min.txt" -o "$REPO/assets/consu
 afconvert "$REPO/assets/consult_5min.aiff" "$REPO/assets/consult_5min.wav" -d LEI16 -f WAVE
 say -v Samantha -r 108 -f "$REPO/assets/consult_10min.txt" -o "$REPO/assets/consult_10min.aiff"
 afconvert "$REPO/assets/consult_10min.aiff" "$REPO/assets/consult_10min.wav" -d LEI16 -f WAVE
+say -v Samantha -r 77 -f "$REPO/assets/consult_15min.txt" -o "$REPO/assets/consult_15min.aiff"
+afconvert "$REPO/assets/consult_15min.aiff" "$REPO/assets/consult_15min.wav" -d LEI16 -f WAVE
 
 echo "==> Clip durations:"
-for f in 30s 1min 5min 10min; do
+for f in 30s 1min 5min 10min 15min; do
   python3 -c "import wave; w=wave.open('$REPO/assets/consult_$f.wav'); print('  consult_$f.wav', round(w.getnframes()/w.getframerate(),1),'s')"
 done
 

@@ -57,6 +57,7 @@ afconvert assets/consult_30s.aiff assets/consult_30s.wav -d LEI16 -f WAVE
 [ -f assets/consult_1min.txt ] && say -v Samantha -r 150 -f assets/consult_1min.txt -o assets/consult_1min.aiff && afconvert assets/consult_1min.aiff assets/consult_1min.wav -d LEI16 -f WAVE
 [ -f assets/consult_5min.txt ] && say -v Samantha -r 150 -f assets/consult_5min.txt -o assets/consult_5min.aiff && afconvert assets/consult_5min.aiff assets/consult_5min.wav -d LEI16 -f WAVE
 [ -f assets/consult_10min.txt ] && say -v Samantha -r 108 -f assets/consult_10min.txt -o assets/consult_10min.aiff && afconvert assets/consult_10min.aiff assets/consult_10min.wav -d LEI16 -f WAVE
+[ -f assets/consult_15min.txt ] && say -v Samantha -r 77 -f assets/consult_15min.txt -o assets/consult_15min.aiff && afconvert assets/consult_15min.aiff assets/consult_15min.wav -d LEI16 -f WAVE
 
 # 4. Reload CoreAudio so BlackHole shows up ------------------------------------
 echo "==> [4/6] Reloading CoreAudio (needs sudo) so BlackHole registers"
