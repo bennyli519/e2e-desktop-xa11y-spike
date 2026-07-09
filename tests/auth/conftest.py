@@ -44,6 +44,11 @@ def _flow_lines(res: LoginResult) -> list[tuple[str, bool | None, str]]:
     if res.already_logged_in:
         return [
             ("reached app", res.reached_app, "already logged in (steps skipped)"),
+            ("login field gone", res.login_field_gone, ""),
+            ("can reach sessions", res.can_reach_sessions, ""),
+            ("can reach settings", res.can_reach_settings, ""),
+            ("full app access", res.full_app_access,
+             "" if res.full_app_access else "depth gate"),
         ]
     if res.error and not res.started_logged_out:
         return [("flow could not start", False, res.error[:60])]
@@ -55,6 +60,11 @@ def _flow_lines(res: LoginResult) -> list[tuple[str, bool | None, str]]:
         ("password submitted", res.password_submitted, ""),
         ("reached app", res.reached_app,
          res.error[:60] if (res.error and not res.reached_app) else ""),
+        ("login field gone", res.login_field_gone, ""),
+        ("can reach sessions", res.can_reach_sessions, ""),
+        ("can reach settings", res.can_reach_settings, ""),
+        ("full app access", res.full_app_access,
+         "" if res.full_app_access else "depth gate"),
     ]
 
 

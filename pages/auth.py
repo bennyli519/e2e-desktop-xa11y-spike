@@ -93,3 +93,56 @@ class AuthPage:
         if ok:
             time.sleep(1.0)
         return ok
+
+    # -- post-login depth checks -----------------------------------------
+    # The web Playwright suite asserts "full app access" after login
+    # (expectFullAppAccess): sessions reachable, settings reachable, and the
+    # sign-in email field GONE. We mirror that depth here with role+name
+    # selectors (data-testid is invisible to the AX tree, per CLAUDE.md).
+
+    # A logged-out login screen still shows an email field; a logged-in app
+    # must NOT. Used to prove we truly left the auth state, not just that some
+    # sidebar text appeared.
+    LOGIN_FIELD_SELECTORS = [
+        "text_field[name='name@company.com']",
+        "text_field[name*='email']",
+        "text_field[name*='Email']",
+        "button[name='Continue']",
+    ]
+
+    # Sessions list / Scribe entry point (the main working area).
+    SESSIONS_SELECTORS = [
+        "button[name='New session']",
+        "button[name='Scribe']",
+        "link[name='Scribe']",
+        "button[name*='Transcribe']",
+        "static_text[value='Scribe']",
+    ]
+
+    # Settings entry point (sidebar button OR the account/footer menu).
+    SETTINGS_SELECTORS = [
+        "button[name='Settings']",
+        "link[name='Settings']",
+        "combo_box[name='Settings']",
+        "button[name='Help']",  # Help lives in the same footer cluster
+        "combo_box[name='Help']",
+        "static_text[value='Settings']",
+    ]
+
+    def has_login_field(self) -> bool:
+        return self._has_any(self.LOGIN_FIELD_SELECTORS)
+
+    def can_reach_sessions(self) -> bool:
+        return self._has_any(self.SESSIONS_SELECTORS)
+
+    def can_reach_settings(self) -> bool:
+        return self._has_any(self.SETTINGS_SELECTORS)
+
+    def has_full_app_access(self) -> bool:
+        """Mirror the web suite's expectFullAppAccess: sessions + settings
+        reachable AND the login field gone."""
+        return (
+            self.can_reach_sessions()
+            and self.can_reach_settings()
+            and not self.has_login_field()
+        )

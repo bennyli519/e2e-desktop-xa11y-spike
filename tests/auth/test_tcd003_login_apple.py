@@ -28,7 +28,8 @@ import os
 import pytest
 import xa11y
 
-from _cases import check_entry_point_launches, check_entry_point_present
+from _cases import check_entry_point_present
+from _flow import APPLE_MARKERS, verify_entry_point_launches
 from lib.login import is_logged_in, is_on_login_page
 from pages import AuthPage
 
@@ -55,5 +56,11 @@ def test_apple_entry_present(heidi_app: xa11y.App):
     reason="Opens a real Apple sign-in browser window; set RUN_MANUAL=1 to run.",
 )
 def test_apple_launches(heidi_app: xa11y.App):
+    """Pressing Apple should actually open the Apple sign-in page in a browser
+    (verified by the browser window title), not merely accept a click."""
     page = _require_login_screen(heidi_app)
-    check_entry_point_launches(page.press_apple(), "Apple sign-in")
+    launched, title = verify_entry_point_launches(page.press_apple, APPLE_MARKERS)
+    assert launched, (
+        "Apple sign-in did not open an Apple sign-in browser window "
+        f"(last browser title seen: {title!r})"
+    )

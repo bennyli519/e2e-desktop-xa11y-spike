@@ -31,6 +31,7 @@ import pytest
 import xa11y
 
 from _cases import check_entry_point_present
+from _flow import SIGNUP_MARKERS, verify_entry_point_launches
 from lib.login import is_logged_in, is_on_login_page
 from pages import AuthPage
 
@@ -57,9 +58,17 @@ def test_signup_entry_present(heidi_app: xa11y.App):
     reason="Navigates away from the login screen; set RUN_MANUAL=1 to run.",
 )
 def test_signup_navigates(heidi_app: xa11y.App):
+    """Pressing Sign up should lead into the sign-up flow.
+
+    Depth: either we leave the plain login screen in-app, OR an external
+    browser opens the Auth0 sign-up page (title match) — mirrors how the web
+    suite proves the IdP flow started. Completing registration (email
+    verification via Mailosaur, onboarding) is a MANUAL step beyond this.
+    """
     page = _require_login_screen(heidi_app)
-    assert page.press_signup(), "Sign up did not accept the press action"
-    # After pressing, we should no longer be sitting on the plain login screen.
-    assert not page.has_continue() or not is_on_login_page(heidi_app), (
-        "pressing Sign up did not move off the login screen"
+    launched, title = verify_entry_point_launches(page.press_signup, SIGNUP_MARKERS)
+    left_login_screen = not page.has_login_field()
+    assert launched or left_login_screen, (
+        "pressing Sign up neither opened the sign-up page in a browser "
+        f"(last title: {title!r}) nor moved off the login screen"
     )

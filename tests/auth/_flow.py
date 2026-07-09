@@ -33,8 +33,9 @@ import xa11y
 
 from lib.login import (
     LoginError,
-    _find_auth0_window,
     _fill_auth0_form_via_input,
+    _find_auth0_window,
+    find_browser_window,
     get_credentials,
     is_logged_in,
     is_on_login_page,
@@ -53,6 +54,13 @@ class LoginResult:
     password_submitted: bool = False   # password typed + submitted, no crash
     reached_app: bool = False          # sidebar markers visible => logged in
     already_logged_in: bool = False    # session was already authenticated
+    # Depth checks (mirror the web suite's expectFullAppAccess) — asserted
+    # AFTER reaching the app, so a shallow "some sidebar text appeared" can't
+    # pass for a genuine login.
+    login_field_gone: bool = False     # sign-in email field is no longer shown
+    can_reach_sessions: bool = False   # sessions / Scribe entry point present
+    can_reach_settings: bool = False   # settings entry point present
+    full_app_access: bool = False      # all three depth checks pass
     error: str | None = None
 
 
@@ -73,10 +81,31 @@ def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
     res = LoginResult()
     FLOW_RESULTS["TCD001"] = res
 
+    def _capture_depth(page: AuthPage) -> None:
+        """Record the expectFullAppAccess-equivalent depth checks.
+
+        Settle briefly first — after the redirect the sidebar can take a
+        moment to finish mounting all footer/settings controls.
+        """
+        for _ in range(10):
+            page.app  # noqa: B018 — keep the handle warm
+            if page.has_full_app_access():
+                break
+            time.sleep(1.0)
+        res.can_reach_sessions = page.can_reach_sessions()
+        res.can_reach_settings = page.can_reach_settings()
+        res.login_field_gone = not page.has_login_field()
+        res.full_app_access = (
+            res.can_reach_sessions
+            and res.can_reach_settings
+            and res.login_field_gone
+        )
+
     try:
         if is_logged_in(heidi_app):
             res.already_logged_in = True
             res.reached_app = True
+            _capture_depth(AuthPage(heidi_app))
             return res
 
         if not is_on_login_page(heidi_app):
@@ -137,8 +166,50 @@ def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
             time.sleep(2)
         if not res.reached_app:
             res.error = "App did not reach logged-in state within 90s"
+            return res
+
+        # ── Step 5: depth — real app access, not just a sidebar marker ──────
+        _capture_depth(page)
 
     except (LoginError, Exception) as e:  # keep the result usable for reporting
         res.error = repr(e)
 
     return res
+
+
+# ---------------------------------------------------------------------------
+# Shared helper for the social / signup entry-point cases (TCD002/003/014).
+# ---------------------------------------------------------------------------
+# Default window-title markers that indicate the external flow actually opened.
+GOOGLE_MARKERS = ["accounts.google.com", "sign in - google", "google accounts"]
+APPLE_MARKERS = ["appleid.apple.com", "apple account", "sign in with apple"]
+SIGNUP_MARKERS = [
+    "auth.heidihealth.com",
+    "signup",
+    "sign up",
+    "login/identifier",
+    "authorize",
+]
+
+
+def verify_entry_point_launches(
+    press_fn,
+    markers: list[str],
+    timeout: float = 20.0,
+) -> tuple[bool, str | None]:
+    """Press an entry point, then confirm an external browser window whose
+    title matches `markers` actually appeared.
+
+    This is DEEPER than "the button accepted a press": it proves the OAuth /
+    signup flow genuinely launched. We can't read the page CONTENT (Chrome's
+    web area is invisible to AX) but the window TITLE carries the destination
+    URL, which is enough to assert the right flow started.
+
+    Returns (launched, matched_title). `launched` is True only if both the
+    press succeeded AND a matching browser window appeared.
+    """
+    pressed = press_fn()
+    if not pressed:
+        return False, None
+    _app, _win, title = find_browser_window(markers, timeout=timeout)
+    return (title is not None), title

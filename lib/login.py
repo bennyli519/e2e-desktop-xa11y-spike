@@ -197,20 +197,27 @@ def perform_login(app: xa11y.App, timeout: float = 90.0) -> None:
     raise LoginError("App did not reach logged-in state within timeout")
 
 
-def _find_auth0_window(timeout: float) -> tuple[xa11y.App | None, "xa11y.Element | None"]:
-    """Find the browser app + window showing the Auth0 login.
+_BROWSER_NAMES = ["Google Chrome", "Safari", "Arc", "Microsoft Edge", "Firefox"]
+
+
+def find_browser_window(
+    markers: list[str], timeout: float
+) -> tuple[xa11y.App | None, "xa11y.Element | None", str | None]:
+    """Find a browser app + window whose title matches any of `markers`.
 
     Chrome doesn't expose web content to AX, but the WINDOW TITLE is visible
-    and contains the Auth0 URL (auth.heidihealth.com/.../login/password).
-    We match on that.
+    (e.g. an external OAuth page). We poll the running browsers and match their
+    window titles against the (lower-cased) markers.
+
+    Returns (browser_app, window_element, matched_title) or (None, None, None).
+    The matched title lets callers record WHICH page opened for reporting.
     """
-    markers = ["auth.heidihealth.com", "login/password", "login/identifier", "heidihealth"]
-    browser_names = ["Google Chrome", "Safari", "Arc", "Microsoft Edge", "Firefox"]
+    lowered = [m.lower() for m in markers]
 
     deadline = time.time() + timeout
     while time.time() < deadline:
         candidates: list[xa11y.App] = []
-        for name in browser_names:
+        for name in _BROWSER_NAMES:
             try:
                 candidates.append(xa11y.App.by_name(name, timeout=0.5))
             except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
@@ -218,8 +225,8 @@ def _find_auth0_window(timeout: float) -> tuple[xa11y.App | None, "xa11y.Element
         try:
             for app in xa11y.App.list():
                 app_title = (app.name or "").lower()
-                if any(m in app_title for m in markers) or any(
-                    name.lower() in app_title for name in browser_names
+                if any(m in app_title for m in lowered) or any(
+                    name.lower() in app_title for name in _BROWSER_NAMES
                 ):
                     candidates.append(app)
         except Exception:
@@ -231,17 +238,29 @@ def _find_auth0_window(timeout: float) -> tuple[xa11y.App | None, "xa11y.Element
                 continue
             seen.add(app.pid)
             title = (app.name or "").lower()
-            if any(m in title for m in markers):
-                return app, app.as_element()
+            if any(m in title for m in lowered):
+                return app, app.as_element(), title
             try:
                 for win in app.children():
-                    title = (win.name or "").lower()
-                    if any(m in title for m in markers):
-                        return app, win
+                    wtitle = (win.name or "").lower()
+                    if any(m in wtitle for m in lowered):
+                        return app, win, wtitle
             except Exception:
                 continue
         time.sleep(1)
-    return None, None
+    return None, None, None
+
+
+def _find_auth0_window(timeout: float) -> tuple[xa11y.App | None, "xa11y.Element | None"]:
+    """Find the browser app + window showing the Auth0 login.
+
+    Chrome doesn't expose web content to AX, but the WINDOW TITLE is visible
+    and contains the Auth0 URL (auth.heidihealth.com/.../login/password).
+    We match on that.
+    """
+    markers = ["auth.heidihealth.com", "login/password", "login/identifier", "heidihealth"]
+    app, win, _title = find_browser_window(markers, timeout)
+    return app, win
 
 
 def _fill_auth0_form_via_input(

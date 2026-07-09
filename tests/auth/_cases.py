@@ -77,6 +77,44 @@ def check_reached_app(res: LoginResult) -> None:
     )
 
 
+# --- depth checks: mirror the web suite's expectFullAppAccess ---------------
+def check_login_field_gone(res: LoginResult) -> None:
+    """After login the sign-in email field must be GONE — proves we truly left
+    the auth state, not just that some sidebar text rendered."""
+    assert res.reached_app, f"never reached the app. error={res.error}"
+    assert res.login_field_gone, (
+        "the sign-in email field is still visible after 'login' — the app did "
+        "not actually leave the authentication screen"
+    )
+
+
+def check_can_reach_sessions(res: LoginResult) -> None:
+    assert res.reached_app, f"never reached the app. error={res.error}"
+    assert res.can_reach_sessions, (
+        "no sessions / Scribe entry point after login — the main working area "
+        "is not accessible"
+    )
+
+
+def check_can_reach_settings(res: LoginResult) -> None:
+    assert res.reached_app, f"never reached the app. error={res.error}"
+    assert res.can_reach_settings, (
+        "no settings entry point after login — account/settings is not "
+        "accessible"
+    )
+
+
+def check_full_app_access(res: LoginResult) -> None:
+    """The consolidated depth gate (sessions + settings reachable AND login
+    field gone) — equivalent to the web suite's expectFullAppAccess."""
+    assert res.reached_app, f"never reached the app. error={res.error}"
+    assert res.full_app_access, (
+        "did not get full app access after login "
+        f"(sessions={res.can_reach_sessions}, settings={res.can_reach_settings}, "
+        f"login_field_gone={res.login_field_gone})"
+    )
+
+
 # --- entry-point checks for social / signup (TCD002/003/014) ----------------
 def check_entry_point_present(present: bool, label: str) -> None:
     assert present, (
