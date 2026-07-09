@@ -3,6 +3,113 @@
 How to add tests and Page Objects. Keep the layering: **selectors in
 `pages/`, assertions in `tests/`.**
 
+## TL;DR — how you write a new test case
+
+You do **not** pull the DOM or read scribe-fe-v2's React source for selectors.
+xa11y drives the app through the OS **accessibility (AX) tree**, so selectors
+come from *dumping the running app*, not from the codebase. The loop:
+
+```
+1. Run the app        → open Heidi (or `pnpm tauri:dev` for Mode 1), log in
+2. Dump the AX tree   → python scripts/dump_page.py --page <Page>
+3. Read the dump      → reports/<Page>_tree.txt → copy real role + name
+4. Put selector in a Page Object   (pages/<page>.py) — the ONLY place selectors live
+5. Write the spec     (tests/<feature>/test_<case>.py) — assertions only
+6. Run from Ghostty   → .venv/bin/python3.14 -m pytest tests/<feature>/test_<case>.py -v -s
+7. Iterate to green; the spec stays as a permanent regression test
+```
+
+"Latest DOM" = the **live AX tree of the running app**, refreshed with
+`dump_page.py`. If a selector breaks after a UI change, re-dump and fix the
+Page Object once — specs don't change.
+
+For the **spec-first / develop-until-green** workflow (write the failing spec
+before the feature exists), see `docs/SPEC_DRIVEN.md`.
+
+## Adding a new test case — step by step
+
+**Prereq: run from Ghostty.** xa11y needs macOS "Screen & System Audio
+Recording" permission, which doesn't propagate from Hermes to child processes.
+Run every command below from Ghostty (or a terminal that holds the permission),
+with Heidi **logged in and foreground**. If the tree dumps empty, this is why.
+
+**1. Discover the UI — never guess selectors.**
+
+```bash
+python scripts/dump_page.py --page Devices   # navigate to a page, then dump it
+python scripts/explore_all.py                # walk every page, dump each to reports/
+```
+
+Open `reports/<Page>_tree.txt` and copy the real `role` + `name`. Names come
+from `aria-label` or visible text — they are often NOT what's painted on screen
+(e.g. an icon button may have `name='Audio input'`, a menu button may read
+`name='Transcribe Open transcription mode menu'`).
+
+**2. Pick the feature folder** under `tests/` (e.g. `tests/scribe/`,
+`tests/device-connection/`). One logical case per file. Create it from the
+template so the GIVEN/WHEN/THEN shape is consistent:
+
+```bash
+cp templates/test_TICKET_template.py tests/scribe/test_my_case.py
+```
+
+**3. Put every selector in a Page Object** (`pages/<page>.py`), never in the
+spec. Use role alternation for portability and a fallback chain:
+
+```python
+# pages/scribe.py — selector appears here exactly once
+def open_firmware_update(self) -> bool:
+    return click_first_match(self.app, [
+        "button[name='device-update-firmware']",   # preferred: aria-label
+        "button[name='Update']",                    # fallback: visible text
+    ])
+```
+
+Queries return data/bool; actions drive the UI and return success.
+
+**4. Write the spec** (`tests/<feature>/test_<case>.py`) — assertions only.
+Encode the acceptance criteria, skip (don't fail) on missing preconditions:
+
+```python
+"""scribe: starting a session shows the recording timer."""
+import pytest
+from pages import ScribePage
+
+pytestmark = [pytest.mark.scribe, pytest.mark.slow]
+
+
+def test_timer_appears(heidi_app):
+    scribe = ScribePage(heidi_app)
+    # GIVEN a fresh session
+    scribe.new_session()
+    # WHEN recording starts
+    scribe.start_transcribing()
+    # THEN the mm:ss timer is visible
+    assert scribe.recording_timer() is not None
+```
+
+**5. Register any new marker** in `pyproject.toml` under
+`[tool.pytest.ini_options]` `markers`.
+
+**6. Run it from Ghostty and iterate to green:**
+
+```bash
+.venv/bin/python3.14 -m pytest tests/scribe/test_my_case.py -v -s
+```
+
+> Use the project venv (`.venv/bin/python3.14`), never bare `pytest` — bare
+> `pytest` can resolve to the wrong interpreter and give confusing empty-tree
+> or "no tests" errors.
+
+### Advanced: many assertions over ONE expensive flow
+
+When a single flow is slow (e.g. a multi-minute recording) but you want one
+visible ✓/✗ per acceptance criterion, don't re-run the flow per assertion. Run
+it once in a **module-scoped fixture**, cache the result, and have each `test_*`
+read the cache. See `tests/recording/` (`_flow.py` runs once → `_cases.py`
+assertions → `test_30s.py` etc. exposes one test per check). This gives a
+checklist-style report without paying the flow cost N times.
+
 ## Before anything: run from Ghostty
 
 xa11y needs macOS "Screen & System Audio Recording" permission, which doesn't
