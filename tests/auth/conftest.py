@@ -16,16 +16,57 @@ TCD002/003/014 depend on external OAuth / email verification that can't be
 driven through the accessibility tree, so they assert the ENTRY POINT only
 (button present + launches); the launch/navigate steps are RUN_MANUAL=1 gated.
 
+Sign-out is the DEFAULT precondition for every auth case (OAuth needs a
+logged-out start), so each run signs out then logs in for real. A package-scoped
+finalizer logs back in afterwards so later domains aren't left logged out.
+Escape hatches: set AUTH_KEEP_SESSION to "1" (don't sign out — fast iteration /
+broken sign_out selectors), or AUTH_NO_RESTORE to "1" (don't log back in —
+auth-only runs).
+
 Run from Ghostty (needs Accessibility + Screen Recording), Heidi foreground:
 
     .venv/bin/python3.14 -m pytest tests/auth/ -v          # all auth cases
     .venv/bin/python3.14 -m pytest tests/auth/test_tcd001_login_email_password.py -v
 
+To skip the sign-out (fast iteration), export AUTH_KEEP_SESSION with value "1"
+before running.
+
 An HTML report is written to reports/report.html by default (see pyproject).
 """
 from __future__ import annotations
 
+import os
+import time
+
+import pytest
+
 from _flow import FLOW_RESULTS, LoginResult
+from lib.login import is_logged_in, perform_login
+
+
+@pytest.fixture(scope="package", autouse=True)
+def _restore_login_after_auth(heidi_app):
+    """Auth tests deliberately sign OUT (OAuth needs a logged-out precondition).
+
+    That would leave every later domain (recording/scribe/device) logged out and
+    skipping. This package-scoped finalizer logs back IN after the auth domain
+    finishes, so a full-suite run (`pytest tests/`) stays healthy.
+
+    Skipped when AUTH_KEEP_SESSION=1 (auth didn't sign out) or AUTH_NO_RESTORE=1
+    (you're only running auth and don't care about the end state).
+    """
+    yield
+    if os.environ.get("AUTH_KEEP_SESSION") == "1":
+        return
+    if os.environ.get("AUTH_NO_RESTORE") == "1":
+        return
+    if is_logged_in(heidi_app):
+        return
+    try:
+        perform_login(heidi_app)
+        time.sleep(2.0)
+    except Exception as e:  # best-effort; don't fail the run on restore
+        print(f"[auth conftest] could not restore login after auth tests: {e!r}")
 
 _CHECK = "\u2713"   # ✓
 _CROSS = "\u2717"   # ✗

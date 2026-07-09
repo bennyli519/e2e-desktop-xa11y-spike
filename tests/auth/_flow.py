@@ -103,10 +103,13 @@ def run_email_password_login(heidi_app: xa11y.App) -> LoginResult:
         )
 
     try:
-        # FORCE_LOGIN=1 signs out first so the full fresh login flow (email ->
-        # Auth0 -> password -> redirect) is actually exercised, not skipped
-        # because the persisted token left us already logged in.
-        if os.environ.get("FORCE_LOGIN") == "1" and is_logged_in(heidi_app):
+        # Auth tests need a LOGGED-OUT precondition (the login screen). By
+        # default we sign out first so the full fresh flow (email -> Auth0 ->
+        # password -> redirect) is genuinely exercised — otherwise the
+        # persisted token leaves us already logged in and the login STEPS skip,
+        # which is a false pass for an OAuth test. Set AUTH_KEEP_SESSION=1 to
+        # skip the sign-out (fast iteration / when sign_out selectors need work).
+        if os.environ.get("AUTH_KEEP_SESSION") != "1" and is_logged_in(heidi_app):
             AuthPage(heidi_app).sign_out()
             time.sleep(2.0)
 

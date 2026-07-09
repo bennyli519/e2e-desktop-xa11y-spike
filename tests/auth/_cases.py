@@ -30,18 +30,20 @@ def make_login_result_fixture():
 def require_login_screen(app: xa11y.App, what: str) -> AuthPage:
     """Return an AuthPage on the login screen, or skip.
 
-    With FORCE_LOGIN=1, sign out first so an already-authenticated session can
-    still exercise the login-screen entry points (Google/Apple/Sign up).
+    Auth tests need a logged-out precondition. By default we sign out first so
+    an already-authenticated (persisted-token) session can still exercise the
+    login-screen entry points (Google/Apple/Sign up). Set AUTH_KEEP_SESSION=1
+    to skip the sign-out (fast iteration / when sign_out selectors need work).
     """
     page = AuthPage(app)
     if is_logged_in(app):
-        if os.environ.get("FORCE_LOGIN") == "1":
+        if os.environ.get("AUTH_KEEP_SESSION") != "1":
             page.sign_out()
             time.sleep(2.0)
         if is_logged_in(app):
             pytest.skip(
-                f"Already logged in — sign out (or set FORCE_LOGIN=1) to test "
-                f"the {what} entry point"
+                f"Still logged in (sign-out failed or AUTH_KEEP_SESSION=1) — "
+                f"cannot test the {what} entry point"
             )
     if not is_on_login_page(app):
         pytest.skip(f"Not on the login page — cannot test the {what} entry point")
@@ -51,9 +53,9 @@ def require_login_screen(app: xa11y.App, what: str) -> AuthPage:
 def _skip_if_already_in(res: LoginResult) -> None:
     if res.already_logged_in:
         pytest.skip(
-            "App was already logged in — login-screen steps can't be exercised. "
-            "Sign out (or clear the persisted Auth0 token) and set FORCE_LOGIN=1 "
-            "to run the full flow."
+            "App was still logged in after sign-out — login-screen steps can't "
+            "be exercised. The sign_out() selectors likely need refining "
+            "(dump the logged-in AX tree), or AUTH_KEEP_SESSION=1 was set."
         )
 
 
