@@ -105,18 +105,19 @@ pytest -m "not longsession"         # skip the multi-minute recording cases
 ```bash
 pytest tests/smoke -v -s            # smoke feature
 pytest tests/auth -v -s             # login flows (TCD001-003, 014)
-pytest tests/scribe -v -s           # ALL Scribe cases (upload/record/pause-resume/usb)
+pytest tests/scribe -v -s           # ALL Scribe cases, in TCD order (004→016)
 pytest tests/remote -v -s           # ALL Chronicle remote-device flows
 ```
 
-**Run one sub-flow folder (Scribe & remote are nested):**
+Scribe specs are flat and named `test_tcd0NN_*.py`, so they collect in TCD
+order by default. Use markers to run a sub-group:
 
 ```bash
-pytest tests/scribe/upload -v -s              # TCD004/005/008 audio+context upload
-pytest tests/scribe/recording -v -s           # TCD006/007 5-min record
-pytest tests/scribe/pause-resume -v -s        # TCD015/016 pause/resume
-pytest tests/scribe/usb-headset -v -s         # TCD009-012 (skip w/o USB hardware)
-pytest tests/remote/device-connection -v -s   # onboarding/reconnect/remove
+pytest tests/scribe -m upload -v -s          # TCD004/005/008 audio+context upload
+pytest tests/scribe -m longsession -v -s     # TCD006/007 5-min record
+pytest tests/scribe -m pause_resume -v -s    # TCD015/016 pause/resume
+pytest tests/scribe -m usb_headset -v -s     # TCD009-012 (skip w/o USB hardware)
+pytest tests/remote/device-connection -v -s  # remote flows still use folders
 pytest tests/remote/ota-upgrade -v -s
 pytest tests/remote/bulk-sync -v -s
 ```
@@ -124,8 +125,8 @@ pytest tests/remote/bulk-sync -v -s
 **Run one file, or one test in a file:**
 
 ```bash
-pytest tests/scribe/upload/test_tcd004_transcribe_audio_upload.py -v -s
-pytest tests/scribe/upload/test_tcd004_transcribe_audio_upload.py::test_note_generated -v -s
+pytest tests/scribe/test_tcd004_transcribe_audio_upload.py -v -s
+pytest tests/scribe/test_tcd004_transcribe_audio_upload.py::test_note_generated -v -s
 ```
 
 **Handy flags:**
@@ -292,11 +293,13 @@ HEIDI_DEV=1 pytest -m smoke
 │   ├── auth/              #   login (TCD001-003) + signup (TCD014)
 │   ├── navigation/        #   sidebar nav, new session
 │   ├── recording/         #   30s/1min/5min/10min/15min note-generation POC
-│   ├── scribe/            #   Scribe release cases (shared engine at feature root)
-│   │   ├── upload/        #     TCD004/005/008 audio + context upload
-│   │   ├── recording/     #     TCD006/007 5-min transcribe/dictate
-│   │   ├── pause-resume/  #     TCD015/016 record → pause → resume
-│   │   └── usb-headset/   #     TCD009-012 (skip without USB hardware)
+│   ├── scribe/            #   Scribe release cases, flat & TCD-ordered
+│   │   ├── test_tcd004..005_*  #     audio upload (transcribe/dictate)
+│   │   ├── test_tcd006..007_*  #     5-min record
+│   │   ├── test_tcd008_*       #     audio + context PDF upload
+│   │   ├── test_tcd009..012_*  #     USB headset (skip without hardware)
+│   │   ├── test_tcd015..016_*  #     record → pause → resume
+│   │   └── _scribe_flow.py / _scribe_cases.py / conftest.py  # shared engine
 │   └── remote/            #   Chronicle remote-device flows
 │       ├── device-connection/     #   onboarding/reconnect/stress/autoconnect/remote-lost
 │       ├── ota-upgrade/

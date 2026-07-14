@@ -1,33 +1,34 @@
-"""TCD016 - Transcribe recording: record, pause, resume; transcription before
-and after pause included with no errors.
+"""TCD015 - Transcribe recording: record, pause, resume; context before and
+after pause included with no errors.
 
 From the Desktop App 2.5.0 release plan:
 
-    Feature: Transcribe recording pause and resume transcription continuity
+    Feature: Transcribe recording pause and resume context continuity
       Given the user is logged in and starts a transcribe recording session
       When the user records audio
       And pauses the recording
       And resumes and continues recording
-      Then transcription from both pre-pause and post-pause segments should be
-        included
+      Then context from both pre-pause and post-pause segments should be included
       And the session should complete with no errors
 
     Execution steps:
-      1. Start transcribe recording and speak first segment.
-      2. Pause recording.
-      3. Resume and speak second segment.
-      4. Finish session and generate transcript.
-      5. Confirm transcript contains both segments accurately and no errors.
+      1. Start a new transcribe recording session.
+      2. Record initial speech segment.
+      3. Pause recording for a short interval.
+      4. Resume and record a second speech segment.
+      5. Complete processing and verify context from both segments is present
+         with no errors.
 
 Automation note:
-    Same record->pause->resume harness as TCD015, but the acceptance focus is
-    the VERBATIM TRANSCRIPT continuity across the pause boundary: the final
-    transcript must contain the distinct keywords from segment A (pre-pause)
-    AND segment B (post-resume) with no dropped text and no error banner.
-    The flow runs ONCE (module-scoped `result` fixture).
+    Two DISTINCT clips are injected either side of the pause (segment A =
+    headache/migraine, segment B = diabetes/insulin — see
+    scripts/make_pause_resume_clips.sh). Asserting keywords from BOTH sets are
+    present in the final transcript proves the pre-pause context survived the
+    pause boundary and the post-resume context was captured. The flow runs
+    ONCE (module-scoped `result` fixture).
 
 Run from Ghostty, logged in, Heidi foreground:
-    .venv/bin/python -m pytest tests/scribe/pause-resume/test_tcd016_transcribe_pause_resume_transcript.py -v
+    .venv/bin/python -m pytest tests/scribe/pause-resume/test_tcd015_transcribe_pause_resume_context.py -v
 """
 import pytest
 
@@ -42,10 +43,10 @@ from _scribe_cases import (
 )
 from _scribe_flow import KEYWORDS_PAUSE_SEG_A, KEYWORDS_PAUSE_SEG_B
 
-pytestmark = [pytest.mark.scribe, pytest.mark.slow]
+pytestmark = [pytest.mark.scribe, pytest.mark.pause_resume, pytest.mark.slow]
 
 result = make_pause_resume_fixture(
-    flow="tcd016", clip_a="pause_seg_a.wav", clip_b="pause_seg_b.wav",
+    flow="tcd015", clip_a="pause_seg_a.wav", clip_b="pause_seg_b.wav",
     keywords_a=KEYWORDS_PAUSE_SEG_A, keywords_b=KEYWORDS_PAUSE_SEG_B,
     seg_seconds=40.0, mode="transcribe",
 )
@@ -67,12 +68,12 @@ def test_resumes(result):
 
 
 @pytest.mark.timeout(600)
-def test_pre_pause_transcription_present(result):
+def test_pre_pause_context_present(result):
     check_pr_segment_a_present(result)
 
 
 @pytest.mark.timeout(600)
-def test_post_resume_transcription_present(result):
+def test_post_resume_context_present(result):
     check_pr_segment_b_present(result)
 
 

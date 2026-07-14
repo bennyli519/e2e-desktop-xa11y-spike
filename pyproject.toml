@@ -49,6 +49,7 @@ markers = [
     "recording: session recording + note generation (POC APP-7808)",
     "upload: Scribe audio/context file upload flows (TCD004/005/008)",
     "usb_headset: Scribe capture via a USB headset (TCD009-012)",
+    "pause_resume: Scribe record → pause → resume flows (TCD015/016)",
     "longsession: multi-minute recording stress tests (5/10 min)",
     "slow: tests that take >10s",
     "long: intentionally long-running tests",
