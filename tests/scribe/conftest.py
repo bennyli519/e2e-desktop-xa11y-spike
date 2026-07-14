@@ -1,27 +1,32 @@
 """tests/scribe: shared config + demo-friendly reporting for Scribe TCD flows.
 
-This feature folder groups the Scribe test cases from the 2.5.0 release plan,
-sub-divided by flow:
+This feature folder holds the Scribe test cases from the 2.5.0 release plan as
+flat, TCD-ordered files (test_tcd0NN_*.py), so they collect in case order and
+map 1:1 to the Notion release table:
 
-    tests/scribe/recording/      TCD006 transcribe 5min, TCD007 dictate 5min
-    tests/scribe/pause-resume/   TCD015 context, TCD016 transcript continuity
-    tests/scribe/upload/         TCD004/005/008 audio (+context) upload
-    tests/scribe/usb-headset/    TCD009-012 USB headset (+ mid-session disconnect)
+    TCD004/005  audio upload (transcribe / dictate)
+    TCD006/007  5-min record (transcribe / dictate)      [longsession]
+    TCD008      audio + context PDF upload
+    TCD009-012  USB headset (+ mid-session disconnect)    [usb_headset]
+    TCD015/016  record → pause → resume                   [pause_resume]
+
+Sub-grouping is marker-based, not folders:
+    pytest tests/scribe -m upload | longsession | pause_resume | usb_headset
 
 Each TCD file runs its flow ONCE (module-scoped `result` fixture) and exposes
 one visible test per acceptance criterion, so pytest output reads like the
 Notion checklist.
 
-Shared engine/asserts live at this level (_scribe_flow.py, _scribe_cases.py);
-this conftest puts them on sys.path so the sub-folders can `from _scribe_flow
-import ...` regardless of pytest's rootdir.
+Shared engine/asserts live alongside the specs (_scribe_flow.py,
+_scribe_cases.py); this conftest puts this dir on sys.path so every spec can
+`from _scribe_flow import ...` regardless of pytest's rootdir.
 
 Run from Ghostty (needs Accessibility + Screen Recording), logged in, Heidi
 foreground:
 
-    .venv/bin/python -m pytest tests/scribe -v
-    .venv/bin/python -m pytest tests/scribe/pause-resume -v
-    .venv/bin/python -m pytest tests/scribe -m "not slow"   # skip 5-min flows
+    .venv/bin/python -m pytest tests/scribe -v            # all cases, TCD order
+    .venv/bin/python -m pytest tests/scribe -m pause_resume -v
+    .venv/bin/python -m pytest tests/scribe -m "not longsession" -v  # skip 5-min flows
 """
 from __future__ import annotations
 
