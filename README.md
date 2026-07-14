@@ -87,13 +87,75 @@ Current test account (in `.env.e2e.example`): `bennyli9612@gmail.com`.
 
 ### 5. Run
 
+Always run from **Ghostty** (the terminal that holds the macOS permissions) with
+the venv active. Use `pytest` or the explicit interpreter
+`.venv/bin/python -m pytest`.
+
+**Run everything / a marker:**
+
 ```bash
-pytest                                    # all 21 tests
-pytest -m smoke                           # just the fast presence checks
-pytest tests/devices/                     # one feature
-pytest tests/devices/test_reconnect.py    # one case
-RECORD_VIDEO=0 pytest                      # skip screen recording (faster)
+pytest                              # entire suite
+pytest -m smoke                     # only the fast presence checks (marker)
+pytest -m "auth or navigation"      # combine markers
+pytest -m "not longsession"         # skip the multi-minute recording cases
 ```
+
+**Run one feature folder:**
+
+```bash
+pytest tests/smoke -v -s            # smoke feature
+pytest tests/auth -v -s             # login flows (TCD001-003, 014)
+pytest tests/scribe -v -s           # ALL Scribe cases (upload/record/pause-resume/usb)
+pytest tests/remote -v -s           # ALL Chronicle remote-device flows
+```
+
+**Run one sub-flow folder (Scribe & remote are nested):**
+
+```bash
+pytest tests/scribe/upload -v -s              # TCD004/005/008 audio+context upload
+pytest tests/scribe/recording -v -s           # TCD006/007 5-min record
+pytest tests/scribe/pause-resume -v -s        # TCD015/016 pause/resume
+pytest tests/scribe/usb-headset -v -s         # TCD009-012 (skip w/o USB hardware)
+pytest tests/remote/device-connection -v -s   # onboarding/reconnect/remove
+pytest tests/remote/ota-upgrade -v -s
+pytest tests/remote/bulk-sync -v -s
+```
+
+**Run one file, or one test in a file:**
+
+```bash
+pytest tests/scribe/upload/test_tcd004_transcribe_audio_upload.py -v -s
+pytest tests/scribe/upload/test_tcd004_transcribe_audio_upload.py::test_note_generated -v -s
+```
+
+**Handy flags:**
+
+```bash
+pytest -k tcd008                    # any test whose id matches "tcd008"
+pytest --collect-only -q tests/scribe   # list what WOULD run (no execution, no AX needed)
+RECORD_VIDEO=0 pytest               # skip per-test screen recording (faster)
+```
+
+> `-s` streams the live per-flow checklist + print output — keep it on for the
+> slow flows (recording, pause/resume, upload) so you can watch progress.
+
+> **Whole-tree `pytest` (no path) currently errors on a pre-existing `_flow`
+> name clash** (`tests/recording/_flow.py` vs `tests/auth/_flow.py`). Run by
+> feature folder (`pytest tests/scribe`, `pytest tests/remote`, …) to avoid it;
+> feature-scoped runs are collision-free. See CLAUDE.md pitfalls.
+
+### Audio setup (recording / upload / pause-resume cases)
+
+Cases that inject audio need BlackHole + the generated clips. One-time:
+
+```bash
+sh scripts/setup_audio.sh    # installs/checks BlackHole + generates ALL clips
+                             # (consult_*.wav AND the pause/resume two-segment clips)
+```
+
+The Scribe upload/pause-resume assets (`consult_*.wav`, `pause_seg_a/b.wav`,
+`context_sample.pdf`) live in `assets/` and are referenced repo-relative, so a
+fresh clone runs with zero path edits.
 
 ### Choosing which Heidi build to test
 
@@ -219,21 +281,33 @@ HEIDI_DEV=1 pytest -m smoke
 ├── conftest.py            # root fixtures: heidi_app, dump_tree, per-test video + failure screenshot
 ├── lib/                   # infrastructure (not Page Objects)
 │   ├── helpers.py         #   click_first_match (selector fallback chain)
+│   ├── audio.py           #   AudioInjector (BlackHole/VB-CABLE clip injection)
 │   └── login.py           #   Auth0 login flow (Heidi → Chrome → back)
 ├── pages/                 # Page Objects — HOW to operate the UI (selectors live here)
 │   ├── sidebar.py
-│   ├── scribe.py
+│   ├── scribe.py          #   record/pause/resume, audio + context upload, transcript/note read
 │   └── device.py
 ├── tests/                 # WHAT to test — one spec per case, by feature
 │   ├── smoke/             #   app launches, key elements render
-│   ├── auth/              #   login
+│   ├── auth/              #   login (TCD001-003) + signup (TCD014)
 │   ├── navigation/        #   sidebar nav, new session
-│   ├── scribe/            #   note input
-│   └── devices/           #   device card, serial, firmware, connection, reconnect, disconnect
+│   ├── recording/         #   30s/1min/5min/10min/15min note-generation POC
+│   ├── scribe/            #   Scribe release cases (shared engine at feature root)
+│   │   ├── upload/        #     TCD004/005/008 audio + context upload
+│   │   ├── recording/     #     TCD006/007 5-min transcribe/dictate
+│   │   ├── pause-resume/  #     TCD015/016 record → pause → resume
+│   │   └── usb-headset/   #     TCD009-012 (skip without USB hardware)
+│   └── remote/            #   Chronicle remote-device flows
+│       ├── device-connection/     #   onboarding/reconnect/stress/autoconnect/remote-lost
+│       ├── ota-upgrade/
+│       ├── remote-session-recording/
+│       └── bulk-sync/
+├── assets/                # audio clips + context PDF (repo-relative, committed)
 ├── scripts/               # exploration tools (dump the AX tree to discover selectors)
 │   ├── dump_page.py
-│   └── explore_all.py
-└── docs/                  # DESIGN, FINDINGS, CONTRIBUTING
+│   ├── setup_audio.sh     #   one-shot: BlackHole + generate all clips
+│   └── make_pause_resume_clips.sh
+└── docs/                  # DESIGN, FINDINGS, CONTRIBUTING, RUNNING
 ```
 
 **Principle:** selectors live in `pages/`, assertions live in `tests/`. UI
@@ -259,14 +333,22 @@ visible text — often NOT what's painted on screen.
 
 ## Test status
 
-| Feature | Tests | Verified |
+| Feature | Cases | Verified |
 |---|---|---|
 | smoke | 6 | ✅ pass |
-| auth (login) | 2 | ✅ pass (full Auth0 flow) |
+| auth (login) | TCD001-003, 014 | ✅ pass (full Auth0 flow; OAuth/signup are entry-point-only) |
 | navigation | 5 | ✅ pass |
-| scribe | 1 | ✅ pass |
-| devices | 7 | ⏳ needs a run against real hardware |
+| recording (POC) | 30s/1min/5min/10min/15min | ✅ pass (BlackHole injection) |
+| scribe · upload | TCD004/005/008 | ✅ pass on real hardware (97.4% accuracy; incl. context PDF) |
+| scribe · recording | TCD006/007 | ✅ pass (5-min transcribe/dictate) |
+| scribe · pause-resume | TCD015/016 | ✅ pass (two-segment, no content lost across pause) |
+| scribe · usb-headset | TCD009-012 | ⏭️ skip by design (needs real USB hardware) |
+| remote · device-connection | onboarding/reconnect/stress/autoconnect/remote-lost | ✅ pass on real Chronicle |
+| remote · ota-upgrade | 1 | ⏳ needs a firmware update to exercise |
+| remote · remote-session-recording | 1 | ⏭️ skip (input trigger has no AX name yet) |
+| remote · bulk-sync | 1 | ⏳ needs pending offline recordings |
 
-Devices tests skip gracefully when no Chronicle device is paired/nearby. To
-finish: run `pytest tests/devices/ -v -s`, then refine selectors in
-`pages/device.py` against `reports/devices_card.txt`.
+Hardware-dependent cases skip gracefully when the precondition (paired Chronicle,
+USB headset, pending sync) isn't met — a red only ever means a real regression.
+Scribe's 7 automatable cases are all verified green; USB (009-012) stays an
+honest skip rather than a low-fidelity BlackHole fake (see CLAUDE.md).

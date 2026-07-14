@@ -103,10 +103,32 @@ class ScribePage:
 
     def transcript_text(self) -> str:
         self.open_tab("Transcript")
+        # The generated transcript renders as ONE large static_text node (traced:
+        # a single ~4-5k char node holds the whole Doctor/Patient dialogue). Grab
+        # the LONGEST static_text — that's the transcript body — instead of
+        # _body_text(), which concatenates sidebar 'Untitled session' noise.
+        longest = self._longest_static_text()
+        if longest and len(longest) >= 100:
+            return longest
         return self._body_text()
+
+    def _longest_static_text(self) -> str:
+        best = ""
+        try:
+            for el in self.app.locator("static_text").elements():
+                txt = (el.value or el.name or "").strip()
+                if len(txt) > len(best):
+                    best = txt
+        except Exception:
+            pass
+        return best
 
     def note_text(self) -> str:
         self.open_tab("Note")
+        # Same idea as transcript: the note body is the longest static_text.
+        longest = self._longest_static_text()
+        if longest and len(longest) >= 100:
+            return longest
         return self._body_text()
 
     def _timer_texts(self) -> list[tuple[str, int]]:
@@ -127,9 +149,27 @@ class ScribePage:
         self.dismiss_open_overlays()
         ok = self.sidebar.new_session()
         if ok:
-            self.app.locator(
-                "button[name='Transcribe'], button[name='Dictate']"
-            ).wait_visible(timeout=20.0)
+            # Wait for ANY session-view marker. The record control is a combined
+            # caret button whose AX name is 'Transcribe Open transcription mode
+            # menu' (so exact name='Transcribe' no longer matches); the Context/
+            # Note tabs are the most stable markers. Try each selector until one
+            # goes visible rather than a single (fragile) combined string.
+            markers = [
+                "button[name*='transcription mode menu']",
+                "button[name='Transcribe']",
+                "button[name='Dictate']",
+                "button[name='Context']",
+                "button[name='Note']",
+            ]
+            deadline = time.time() + 20.0
+            seen = False
+            while time.time() < deadline and not seen:
+                for sel in markers:
+                    if self.app.locator(sel).exists():
+                        seen = True
+                        break
+                if not seen:
+                    time.sleep(0.5)
             self.dismiss_open_overlays()
         return ok
 
@@ -222,49 +262,93 @@ class ScribePage:
         return self.select_input_device("Heidi Remote")
 
     def start_transcribing(self) -> None:
-        self.select_recording_mode("Transcribe")
-        self.app.locator("button[name='Transcribe']").wait_visible(timeout=20.0)
-        self.app.locator("button[name='Transcribe']").press()
-
+        # The record control is a split button whose AX name is the combined
+        # 'Transcribe Open transcription mode menu'. Pressing it fires the
+        # DEFAULT action = start recording in the currently-selected mode.
+        # Default mode is Transcribe, so we can press it directly. Match on a
+        # substring since the exact name is the combined string.
+        self._press_record_split_button("Transcribe")
         consent = self.app.locator("button[name*='consent']")
         if consent.exists():
             consent.press()
-
         self.app.locator(
-            "button[name*='Pause transcribing'], button[name*='End recording']"
+            "button[name*='Pause transcribing'], button[name*='End recording'], "
+            "button[name*='End transcribing']"
         ).wait_visible(timeout=20.0)
 
     def start_dictating(self) -> None:
+        # Switch the split button's mode to Dictate first (via the caret menu),
+        # then press it to start. select_recording_mode picks the menu item.
         self.select_recording_mode("Dictate")
-        self.app.locator("button[name='Dictate']").wait_visible(timeout=20.0)
-        self.app.locator("button[name='Dictate']").press()
-
+        self._press_record_split_button("Dictate")
         consent = self.app.locator("button[name*='consent']")
         if consent.exists():
             consent.press()
-
         self.app.locator(
-            "button[name*='Pause dictating'], button[name*='End recording']"
+            "button[name*='Pause dictating'], button[name*='End recording'], "
+            "button[name*='End dictating']"
         ).wait_visible(timeout=20.0)
+
+    def _press_record_split_button(self, mode: str) -> None:
+        """Press the main record split-button to START recording.
+
+        Its AX name is 'Transcribe Open transcription mode menu' (or the Dictate
+        equivalent). We match on a substring of the mode label and press the
+        node — press() fires the button's DEFAULT action (start recording),
+        which is what we want here (unlike opening the mode menu, which needs
+        expand()).
+        """
+        for sel in (
+            f"button[name^='{mode}']",
+            f"button[name*='{mode}']",
+            f"button[name='{mode}']",
+        ):
+            loc = self.app.locator(sel)
+            if loc.exists():
+                loc.wait_visible(timeout=20.0)
+                loc.press()
+                return
+        # Last resort: the generic mode-menu split button.
+        loc = self.app.locator("button[name*='transcription mode menu']")
+        loc.wait_visible(timeout=20.0)
+        loc.press()
 
     def start_recording(self) -> None:
         self.start_transcribing()
 
     def select_recording_mode(self, mode: str) -> bool:
-        if self.app.locator(f"button[name='{mode}']").exists():
-            return True
+        """Ensure the split button's mode is `mode` (Transcribe/Dictate).
 
-        opened = click_first_match(
-            self.app,
-            [
-                "button[name='Open transcription mode menu']",
-                "button[name*='mode menu']",
-            ],
-        )
-        if not opened:
+        The split button's AX name STARTS WITH the current mode (e.g.
+        'Transcribe Open transcription mode menu'), so if it already starts with
+        the requested mode we're done. Otherwise open the caret menu (expand)
+        and click the mode's menu_item.
+        """
+        # Already in this mode? The split-button name starts with the mode.
+        for b in self.app.locator("button").elements():
+            name = (b.name or "").strip()
+            if name.startswith(mode) and "transcription mode menu" in name:
+                return True
+
+        if not self._open_mode_menu():
             return False
-        time.sleep(0.8)
+        time.sleep(0.5)
 
+        # Click the mode's menu_item (role=menu_item, exact name).
+        item = self.app.locator(f"menu_item[name='{mode}']")
+        if item.exists():
+            try:
+                item.press()
+                time.sleep(1)
+                return True
+            except Exception:
+                try:
+                    xa11y.input_sim().click(item.elements()[0])
+                    time.sleep(1)
+                    return True
+                except Exception:
+                    pass
+        # Fallback: scan roles for the mode label.
         for role in ["menu_item", "list_item", "button", "static_text"]:
             try:
                 elements = self.app.locator(role).elements()
@@ -276,12 +360,12 @@ class ScribePage:
                 try:
                     el.press()
                     time.sleep(1)
-                    return self.app.locator(f"button[name='{mode}']").exists()
+                    return True
                 except Exception:
                     try:
                         xa11y.input_sim().click(el)
                         time.sleep(1)
-                        return self.app.locator(f"button[name='{mode}']").exists()
+                        return True
                     except Exception:
                         continue
         return False
@@ -319,6 +403,8 @@ class ScribePage:
                 "button[name='Pause dictating']",
                 "button[name*='Pause transcribing']",
                 "button[name*='Pause dictating']",
+                "button[name*='Pause recording']",
+                "button[name*='Pause']",
             ],
         )
 
@@ -326,11 +412,16 @@ class ScribePage:
         return click_first_match(
             self.app,
             [
+                # Traced from a real tree: after pausing, the control is named
+                # 'Resume recording' (not 'Resume transcribing/dictating').
+                "button[name='Resume recording']",
+                "button[name*='Resume recording']",
                 "button[name='Resume']",
                 "button[name='Resume transcribing']",
                 "button[name='Resume dictating']",
                 "button[name*='Resume transcribing']",
                 "button[name*='Resume dictating']",
+                "button[name*='Resume']",
             ],
         )
 
@@ -344,11 +435,405 @@ class ScribePage:
                 "button[name*='End recording']",
                 "button[name*='End transcribing']",
                 "button[name*='End dictating']",
+                # When PAUSED the end control is named 'End session'.
+                "button[name='End session']",
+                "button[name*='End session']",
             ],
         )
         if ok:
             time.sleep(2)
         return ok
+
+    # --- audio upload (TCD004/005/008) ---------------------------------
+    def open_upload_dialog(self) -> bool:
+        """Open the 'Upload a recording' dialog via the Transcribe caret menu.
+
+        The record control is a SPLIT BUTTON: a main 'Transcribe' action plus a
+        separate ChevronDown caret (aria-label 'Open transcription mode menu').
+        In the AX tree the two DOM buttons collapse into ONE node named
+        'Transcribe Open transcription mode menu'. Calling press() on it fires
+        the DEFAULT action (start transcribing) instead of opening the menu, so
+        we must click the caret specifically — the RIGHT edge of the node's
+        bounds — via InputSim coordinates.
+
+        Returns True once the dialog (group 'Upload a recording') is present.
+        """
+        if self._upload_dialog_present():
+            return True
+
+        # The caret only shows in the main record view — if we're on the Context
+        # tab (e.g. right after a context upload), switch to Note first so the
+        # 'Transcribe Open transcription mode menu' button is present.
+        if not self.app.locator("button[name*='transcription mode menu']").exists():
+            self.open_tab("Note")
+            time.sleep(1.0)
+
+        if not self._open_mode_menu():
+            return False
+        time.sleep(1.0)
+
+        # Click the 'Upload session audio' menu item (role=menu_item, exact name
+        # confirmed via dump). Try the direct selector first, then a text scan.
+        item = self.app.locator("menu_item[name='Upload session audio']")
+        if item.exists():
+            try:
+                item.press()
+                time.sleep(1.5)
+                if self._upload_dialog_present():
+                    return True
+            except Exception:
+                try:
+                    xa11y.input_sim().click(item.elements()[0])
+                    time.sleep(1.5)
+                    if self._upload_dialog_present():
+                        return True
+                except Exception:
+                    pass
+
+        for role in ["menu_item", "list_item", "button", "static_text"]:
+            try:
+                elements = self.app.locator(role).elements()
+            except Exception:
+                continue
+            for el in elements:
+                text = (el.name or el.value or "").strip().lower()
+                if "upload" in text and "audio" in text:
+                    try:
+                        el.press()
+                    except Exception:
+                        try:
+                            xa11y.input_sim().click(el)
+                        except Exception:
+                            continue
+                    time.sleep(1.5)
+                    if self._upload_dialog_present():
+                        return True
+        return self._upload_dialog_present()
+
+    def _mode_menu_open(self) -> bool:
+        """True if the transcription-mode dropdown is currently open.
+
+        The items are `menu_item` role (not static_text), so _has_text can't see
+        them — check the menu item / menu container directly.
+        """
+        for sel in (
+            "menu_item[name='Upload session audio']",
+            "menu_item[name='Dictate']",
+            "menu[name*='transcription mode']",
+        ):
+            if self.app.locator(sel).exists():
+                return True
+        return False
+
+    def _open_mode_menu(self) -> bool:
+        """Open the transcription-mode dropdown.
+
+        The split-button node collapses main+caret into one AX node. We try, in
+        order: (1) expand() — the semantic 'open menu' action; (2) a coordinate
+        click on the RIGHT edge of the node (where the ChevronDown caret sits),
+        avoiding the default Transcribe action at the centre; (3) press() as a
+        last resort. Success = the menu's `menu_item`s become visible.
+        """
+        if self._mode_menu_open():
+            return True
+
+        btns = []
+        for sel in ("button[name*='transcription mode menu']",
+                    "button[name*='mode menu']"):
+            try:
+                btns = self.app.locator(sel).elements()
+            except Exception:
+                btns = []
+            if btns:
+                break
+        if not btns:
+            return False
+
+        btn = btns[0]
+        sim = xa11y.input_sim()
+
+        # (1) Semantic expand.
+        try:
+            btn.expand()
+            time.sleep(0.8)
+            if self._mode_menu_open():
+                return True
+        except Exception:
+            pass
+
+        # (2) Coordinate click on the caret (right edge, vertically centred).
+        try:
+            b = btn.bounds
+            if b is not None:
+                x = int(b.x + b.width - 10)
+                y = int(b.y + b.height / 2)
+                sim.click((x, y))
+                time.sleep(0.8)
+                if self._mode_menu_open():
+                    return True
+        except Exception:
+            pass
+
+        # (3) Last resort: press the node (may fire the default action).
+        try:
+            btn.press()
+            time.sleep(0.8)
+            return self._mode_menu_open()
+        except Exception:
+            return False
+
+    def _upload_dialog_present(self) -> bool:
+        if self.app.locator("group[name='Upload a recording']").exists():
+            return True
+        # Fallback: match the dropzone/label text.
+        return self._has_text(["Click or drag file to this area", "Upload a recording"])
+
+    def select_upload_mode(self, mode: str) -> bool:
+        """Pick the Transcribe/Dictate segmented control INSIDE the upload
+        dialog. `mode` is 'Transcribe' or 'Dictate' (rendered as radio_buttons).
+        """
+        target = mode.strip().capitalize()
+        for sel in (f"radio_button[name='{target}']", f"button[name='{target}']"):
+            loc = self.app.locator(sel)
+            if loc.exists():
+                try:
+                    loc.press()
+                    time.sleep(0.5)
+                    return True
+                except Exception:
+                    try:
+                        xa11y.input_sim().click(loc.elements()[0])
+                        time.sleep(0.5)
+                        return True
+                    except Exception:
+                        pass
+        return False
+
+    def upload_audio(self, file_path, mode: str = "Transcribe") -> bool:
+        """Upload an audio file through the 'Upload a recording' dialog.
+
+        Steps (all traced from a real AX tree):
+          1. open the dialog (caret -> 'Upload session audio')
+          2. select the Transcribe/Dictate segmented control
+          3. click the dropzone button -> native NSOpenPanel (dialog 'Open')
+          4. in the panel, use Cmd+Shift+G ('Go to folder') to type the
+             ABSOLUTE path, Enter to resolve it, Enter again / click 'Open'
+             to confirm. This avoids clicking through the file list and is
+             resolution-independent.
+
+        Returns True if the panel was driven and dismissed (upload started).
+        The caller then waits for note generation as usual.
+        """
+        from pathlib import Path as _Path
+
+        file_path = str(_Path(file_path).expanduser().resolve())
+
+        if not self.open_upload_dialog():
+            return False
+        # Default dialog mode is Transcribe; only switch if Dictate requested.
+        if mode.strip().lower() == "dictate":
+            self.select_upload_mode("Dictate")
+
+        # Click the dropzone to trigger the native picker. The dropzone is a
+        # button just before the 'Click or drag...' static_text.
+        clicked = self._click_dropzone()
+        if not clicked:
+            return False
+
+        return self._drive_open_panel(file_path)
+
+    def _drive_open_panel(self, file_path: str) -> bool:
+        """Drive the native macOS Open panel to select `file_path`.
+
+        Shared by audio upload and context upload. Assumes the panel is about to
+        appear (or already visible). Uses Cmd+Shift+G ('Go to folder') to type
+        the ABSOLUTE path, which avoids clicking the file list and is
+        resolution-independent. Returns True once the panel is dismissed.
+        """
+        from pathlib import Path as _Path
+        file_path = str(_Path(file_path).expanduser().resolve())
+
+        panel = self.app.locator("dialog[name='Open']")
+        try:
+            panel.wait_visible(timeout=10.0)
+        except Exception:
+            return False
+
+        sim = xa11y.input_sim()
+        # Cmd+Shift+G opens the 'Go to the folder' path sheet.
+        sim.chord("g", ["Meta", "Shift"])
+        # The sheet needs a moment to appear AND grab focus — typing too soon
+        # drops the first character(s) (we saw '/Users' arrive as '/sers').
+        time.sleep(1.8)
+
+        # Clear the field, prime focus with a throwaway '/'+Backspace so the
+        # first REAL char isn't dropped, then type the path char-by-char.
+        for _ in range(80):
+            sim.press("Backspace")
+        time.sleep(0.2)
+        sim.type_text("/")
+        time.sleep(0.1)
+        sim.press("Backspace")
+        time.sleep(0.1)
+        for ch in file_path:
+            sim.type_text(ch)
+            time.sleep(0.02)
+        time.sleep(0.5)
+
+        # First Return submits the go-to sheet -> selects the file, enabling Open.
+        sim.press("Return")
+        time.sleep(1.5)
+
+        def _open_button():
+            for sel in ("dialog[name='Open'] button[name='Open']",
+                        "button[name='Open']"):
+                loc = self.app.locator(sel)
+                if loc.exists():
+                    try:
+                        return loc.elements()[0]
+                    except Exception:
+                        return None
+            return None
+
+        confirmed = False
+        deadline = time.time() + 8.0
+        while time.time() < deadline:
+            btn = _open_button()
+            if btn is not None:
+                try:
+                    if getattr(btn, "enabled", True):
+                        btn.press()
+                        confirmed = True
+                        break
+                except Exception:
+                    pass
+            sim.press("Return")
+            time.sleep(1.0)
+
+        if not confirmed and not self.app.locator("dialog[name='Open']").exists():
+            confirmed = True
+
+        time.sleep(1.5)
+        return confirmed or not self.app.locator("dialog[name='Open']").exists()
+
+    def upload_context(self, file_path) -> bool:
+        """Upload a CONTEXT file via the Context tab's paperclip button.
+
+        Traced from scribe-fe-v2: the control is an icon-only button
+        (Paperclip) with data-testid 'context-file-upload-button'. Clicking it
+        opens the same native NSOpenPanel as audio upload, so we reuse
+        _drive_open_panel. Returns True once the panel is dismissed.
+        """
+        from pathlib import Path as _Path
+        file_path = str(_Path(file_path).expanduser().resolve())
+
+        # Switch to the Context tab (where the uploader lives).
+        self.open_context_tab()
+        time.sleep(1.0)
+
+        # The paperclip upload button is icon-only (NO AX name). Traced from a
+        # real tree it lives inside the context editor group
+        # `group "Drag and drop files here"`, as the button right after the
+        # context text_area. Click that button.
+        if not self._click_context_paperclip():
+            return False
+
+        return self._drive_open_panel(file_path)
+
+    def _click_context_paperclip(self) -> bool:
+        """Click the Context tab's icon-only paperclip (📎) upload button.
+
+        It has NO AX name, so we identify it STRUCTURALLY (no coordinates):
+
+          - The context editor's buttons live in a container whose children
+            include the context `text_area`. The paperclip + 'add patient'
+            buttons are siblings of that text_area.
+          - The MICROPHONE button (which must NOT be clicked — it starts
+            dictation) lives in a different group whose siblings include a
+            `combo_box` (its mode dropdown) and NO text_area.
+
+        So the safe candidate set = empty-name buttons whose PARENT's children
+        include a text_area but NOT a combo_box. That excludes the mic entirely.
+        Among those we skip tiny (<20px) placeholder nodes. Both remaining
+        candidates (paperclip + add-patient) are harmless to click — neither
+        starts dictation — so we click each until the native Open panel appears.
+        """
+        try:
+            all_btns = self.app.locator("button").elements()
+        except Exception:
+            return False
+
+        def _sibling_roles(btn):
+            try:
+                parent = btn.parent()
+                if not parent:
+                    return []
+                return [c.role for c in parent.children()]
+            except Exception:
+                return []
+
+        candidates = []
+        for b in all_btns:
+            if (b.name or "").strip():
+                continue  # icon-only buttons only
+            roles = _sibling_roles(b)
+            # Must be in the context-editor group (has a text_area sibling) and
+            # NOT in the mic group (which has a combo_box sibling).
+            if "text_area" not in roles or "combo_box" in roles:
+                continue
+            bounds = getattr(b, "bounds", None)
+            if bounds is not None and (bounds.width < 20 or bounds.height < 20):
+                continue  # skip 2x2 placeholder nodes
+            candidates.append(b)
+
+        # Click candidates (all dictation-safe) until the Open panel appears.
+        for btn in candidates:
+            try:
+                btn.press()
+            except Exception:
+                try:
+                    xa11y.input_sim().click(btn)
+                except Exception:
+                    continue
+            time.sleep(1.5)
+            if self.app.locator("dialog[name='Open']").exists():
+                return True
+
+        return self.app.locator("dialog[name='Open']").exists()
+
+    def _click_dropzone(self) -> bool:
+        """Click the FileDropzone button inside the upload dialog."""
+        # The dropzone is an (empty-name) button adjacent to the
+        # 'Click or drag file to this area to upload' static_text. Find that
+        # text, then click the nearest preceding button in the dialog subtree.
+        dialog = self.app.locator("group[name='Upload a recording']")
+        if dialog.exists():
+            try:
+                buttons = dialog.descendant("button").elements()
+            except Exception:
+                buttons = []
+            # The Close button also lives here; pick the first non-Close button.
+            for btn in buttons:
+                if (btn.name or "").strip() != "Close":
+                    try:
+                        btn.press()
+                        time.sleep(1.0)
+                        return True
+                    except Exception:
+                        try:
+                            xa11y.input_sim().click(btn)
+                            time.sleep(1.0)
+                            return True
+                        except Exception:
+                            continue
+        # Fallback: click the label text directly.
+        return click_first_match(
+            self.app,
+            [
+                "static_text[value*='Click or drag file']",
+                "button[name*='Click or drag']",
+            ],
+        )
 
     def stop_recording(self) -> None:
         if not self.end_recording():

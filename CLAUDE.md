@@ -45,6 +45,23 @@ discover the tree, write a spec, run it, read the result.
   fresh machine use a normal `.venv` (`pip install -e .`).
 - Heidi installed at `/Applications/Heidi.app`.
 - Test account: `bennyli9612@gmail.com` (password in `.env.e2e`, gitignored).
+
+## Test-account strategy (decided) — fixed account + per-run reset, NOT re-register
+
+Every run uses ONE fixed test account (above) and resets STATE at the start of
+each flow, rather than registering a fresh account each run. Rationale:
+- Sign-up needs email verification + a brand-new unused inbox every run (else
+  "email already registered"); its form is in the Auth0 browser (invisible to
+  AX); Auth0 rate-limits automated sign-ups.
+- A fresh account is EMPTY — no org/templates/team/paired device/pending
+  recordings — so Scribe/Evidence/device/bulk-sync cases have no data to test
+  and produce false skips/fails.
+- What we actually want is a CLEAN STATE, not a new account: each flow opens a
+  fresh session and cleans up dangling state (see recording's
+  `_reach_fresh_session`, which Ends a leftover recording first). Add a per-domain
+  `reset` fixture where isolation is needed; delete test data afterwards.
+- Registration (TCD014) is tested as its OWN standalone case, NOT as a
+  precondition for other tests.
 - Reference (old) framework cloned at `/tmp/Desktop-E2E-Test` during the spike
   — the cua-driver suite we ported structure/logic from. Source:
   https://github.com/bennyli519/Desktop-E2E-Test
@@ -139,6 +156,71 @@ the Page Object method once; specs are untouched.
 16. **Input-source trigger is icon-only (no AX name)** — can't select "Heidi
     Remote" as the recording input by text yet. remote-session recording skips
     until scribe-fe-v2 adds an aria-label to `v2-input-source-trigger`.
+17. **Record control is a SPLIT BUTTON, collapsed to ONE AX node.** The green
+    Transcribe button + its ChevronDown caret render as a single node named
+    `"Transcribe Open transcription mode menu"`. `press()` fires the DEFAULT
+    action (starts recording!) — to open the mode menu (Transcribe / Dictate /
+    Upload session audio) call `element.expand()`, NOT press. See
+    `ScribePage._open_mode_menu()`. Menu items are role `menu_item` with exact
+    names (`"Upload session audio"` etc), NOT static_text — `_has_text()` can't
+    see them, check `menu_item[name=...]` directly.
+18. **Audio upload ends in a native NSOpenPanel** (`dialog "Open"`), which IS
+    visible to AX (unlike Chrome web content). Don't click through the file
+    list — drive it with `Cmd+Shift+G` ("Go to folder"), type the ABSOLUTE
+    path, Return to select, then press `button[name='Open']`. See
+    `ScribePage.upload_audio()`. The go-to sheet DROPS the first character(s)
+    if you type too soon (`/Users` → `/sers`): wait ~1.8s after the chord,
+    clear the field, type a throwaway `/`+Backspace to prime focus, THEN type
+    the path char-by-char.
+19. **Transcript/note body is ONE big static_text node** (~4-5k chars holds the
+    whole dialogue), NOT many small ones. `_body_text()` concatenates sidebar
+    "Untitled session" noise and misreads it; read the LONGEST static_text
+    instead (`ScribePage._longest_static_text()`, used by transcript_text /
+    note_text). Also: on the UPLOAD path the transcript lands LATER than the
+    note — wait for note completion, then poll transcript_text() until it's
+    stable across 2 reads before scoring (see `run_upload_flow`).
+20. **A stale/backgrounded Heidi instance publishes an EMPTY tree even when it
+    looks fine.** If `App.by_name` attaches (you get a PID) but
+    `locator("button").elements()` is `[]`, the fix is to QUIT AND RELAUNCH
+    Heidi (a specific bad instance can wedge). `_reach_fresh_session` force-
+    fronts via `open -a Heidi` (un-minimises + raises, more reliable than
+    osascript `activate`) and retries login detection 6×2.5s before skipping.
+21. **Recording control names CHANGE across pause/resume states** (traced live):
+    - while recording: `"Pause transcribing"` + `"End recording"`
+    - while PAUSED:     `"Resume recording"` + `"End session"`
+    So `resume_recording()` must match `"Resume recording"` (NOT "Resume
+    transcribing/dictating"), and `end_recording()` must ALSO accept
+    `"End session"` for the paused state. To START recording, press the split
+    button directly (`_press_record_split_button`, substring/prefix match on
+    "Transcribe"/"Dictate") — its default action starts capture. For Dictate,
+    `select_recording_mode("Dictate")` opens the caret menu (expand) and clicks
+    the `menu_item` first, then press starts it.
+22. **Context tab has a paperclip 📎 AND a microphone 🎙 — both icon-only (no AX
+    name). NEVER click the mic — it starts dictation and breaks the session.**
+    Identify the paperclip STRUCTURALLY, not by coordinates: it lives in a group
+    whose children include the context `text_area`; the mic lives in a group
+    whose siblings include a `combo_box` (its mode dropdown). So the safe
+    candidate set = empty-name buttons whose parent's children include a
+    `text_area` but NOT a `combo_box` (skip <20px placeholder nodes). Both
+    remaining candidates (paperclip + add-patient 👤+) are click-safe. See
+    `ScribePage._click_context_paperclip()`. Context upload reuses the same
+    NSOpenPanel driver as audio (`_drive_open_panel`). Context files accept
+    `.pdf/.doc/.docx/.png/.jpg`; upload the context FIRST, then switch back to
+    the Note view (the Transcribe caret isn't present on the Context tab) before
+    uploading audio.
+23. **Test assets MUST be repo-relative, never absolute** (so others can clone &
+    run). Resolve via `ASSETS = Path(__file__).resolve().parent…/ "assets"`;
+    specs pass only a FILENAME. Convert to absolute only at the very last step
+    when feeding macOS NSOpenPanel's Cmd+Shift+G field (which requires abs).
+    `scripts/setup_audio.sh` generates every clip incl. the pause/resume two-
+    segment clips (calls `make_pause_resume_clips.sh`) so a fresh clone is
+    one-command ready.
+24. **Pause/resume validation needs TWO DISTINCT audio segments** (TCD015/016).
+    Segment A = headache/migraine keywords, Segment B = diabetes/insulin — so
+    asserting both keyword sets appear in the final transcript proves nothing
+    was lost across the pause boundary. A single reused clip can't distinguish
+    "segment B recorded" from "segment B dropped". Generated by
+    `scripts/make_pause_resume_clips.sh` (`say`, no AX perms needed).
 
 ## How to work on this repo
 

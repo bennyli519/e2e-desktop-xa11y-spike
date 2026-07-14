@@ -243,6 +243,20 @@ class AudioInjector:
     def play(self, clip: str | Path, seconds: float) -> None:
         self._proc = play_clip(clip, seconds)
 
+    def stop_playback(self) -> None:
+        """Stop the CURRENT clip without restoring devices.
+
+        Used by the pause/resume flow to end segment-A playback before pausing
+        the recording, then start segment-B playback after resume. The audio
+        ROUTING (BlackHole default I/O on macOS / selected input on Windows)
+        stays in place so the next play() call still reaches Heidi's mic; only
+        the running playback process is stopped. cleanup() still restores
+        devices at the end.
+        """
+        if self._proc is not None:
+            stop_clip(self._proc)
+            self._proc = None
+
     def cleanup(self) -> None:
         if self._proc is not None:
             stop_clip(self._proc)
