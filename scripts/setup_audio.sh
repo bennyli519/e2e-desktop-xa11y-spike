@@ -49,6 +49,9 @@ for f in 30s 1min 5min 10min 15min; do
   python3 -c "import wave; w=wave.open('$REPO/assets/consult_$f.wav'); print('  consult_$f.wav', round(w.getnframes()/w.getframerate(),1),'s')"
 done
 
+echo "==> Generating pause/resume clips (TCD015/016 — two distinct segments)"
+sh "$REPO/scripts/make_pause_resume_clips.sh"
+
 echo ""
 echo "==> Done. IMPORTANT: reboot for BlackHole to appear as an audio device."
 echo "    Verify after reboot:  SwitchAudioSource -a | grep BlackHole"

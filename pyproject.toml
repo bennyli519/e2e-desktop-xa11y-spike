@@ -22,7 +22,7 @@ py-modules = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "tests/scribe"]
 norecursedirs = ["templates", "scripts", "reports", ".venv", "*.egg-info"]
 python_files = "test_*.py"
 python_classes = "Test*"
@@ -47,6 +47,8 @@ markers = [
     "needs_device: requires a real Chronicle device paired/nearby (skips otherwise)",
     "needs_manual: requires a human to press the physical device button",
     "recording: session recording + note generation (POC APP-7808)",
+    "upload: Scribe audio/context file upload flows (TCD004/005/008)",
+    "usb_headset: Scribe capture via a USB headset (TCD009-012)",
     "longsession: multi-minute recording stress tests (5/10 min)",
     "slow: tests that take >10s",
     "long: intentionally long-running tests",
