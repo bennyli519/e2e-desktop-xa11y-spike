@@ -313,12 +313,15 @@ def heidi_app() -> xa11y.App:
 
     # 4. DEFAULT (portable): launch by name, attach by name. Cross-platform:
     #    macOS uses `open -a`, Windows uses Start-Process (see lib.launch_app).
+    #    Pass HEIDI_APP_PATH through if set so `open -a` targets the exact
+    #    bundle — a bare name can resolve to the wrong same-named "Heidi"
+    #    (Parallels Windows wrapper, DMG volume, Xcode iOS build).
     try:
         app = xa11y.App.by_name(APP_NAME, timeout=3.0)
     except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):
         # Not running — launch it, then attach by name.
         from lib import launch_app
-        launch_app(APP_NAME)
+        launch_app(APP_NAME, app_path=HEIDI_APP_PATH)
         try:
             app = xa11y.App.by_name(APP_NAME, timeout=STARTUP_TIMEOUT)
         except (xa11y.TimeoutError, xa11y.SelectorNotMatchedError):

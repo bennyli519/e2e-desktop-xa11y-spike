@@ -17,11 +17,15 @@ from lib import IS_WINDOWS, activate_app, click_first_match
 from pages.sidebar import Sidebar
 
 
-def _activate_heidi() -> None:
+def _activate_heidi(app: "xa11y.App | None" = None) -> None:
     """Bring Heidi to the foreground. A backgrounded WKWebView (macOS) blanks its
     AX tree, so long device flows must keep Heidi frontmost between steps. On
-    Windows UIA this is a harmless best-effort nicety."""
-    activate_app("Heidi")
+    Windows UIA this is a harmless best-effort nicety.
+
+    Pass the attached `app` so activation targets its PID — activating by the
+    name "Heidi" can front the wrong same-named bundle (Parallels Windows
+    wrapper, DMG volume, Xcode iOS build) on this machine."""
+    activate_app("Heidi", pid=getattr(app, "pid", None) if app else None)
 
 
 class DevicePage:
@@ -193,7 +197,7 @@ class DevicePage:
     def wait_connected(self, timeout: float = 30.0) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            _activate_heidi()
+            _activate_heidi(self.app)
             if self.is_connected():
                 return True
             time.sleep(1.5)
@@ -202,7 +206,7 @@ class DevicePage:
     def wait_disconnected(self, timeout: float = 30.0) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            _activate_heidi()
+            _activate_heidi(self.app)
             if self.is_disconnected() and not self.is_reconnecting():
                 return True
             time.sleep(1.5)
@@ -318,7 +322,7 @@ class DevicePage:
         Heidi each poll so a mid-flow focus steal doesn't blank the AX tree."""
         deadline = time.time() + timeout
         while time.time() < deadline:
-            _activate_heidi()
+            _activate_heidi(self.app)
             if self.remove_succeeded() or self.has_initial_pairing_card():
                 return True
             time.sleep(2)

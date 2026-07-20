@@ -102,14 +102,27 @@ def _running_heidi_pids() -> list[int]:
 def relaunch_app(app_name: str | None = None) -> None:
     """Quit Heidi (best-effort) and relaunch it via `open -a`."""
     names = [app_name] if app_name else _configured_app_names()
-    # Ask the app to quit gracefully first.
-    for n in names:
-        subprocess.run(["osascript", "-e", f'tell application "{n}" to quit'],
-                       capture_output=True)
+    # Quit by PID first (unambiguous). `tell application "Heidi" to quit` goes
+    # through LaunchServices and can hit the wrong same-named bundle (Parallels
+    # Windows wrapper, DMG volume). _running_heidi_pids already targets the
+    # configured build.
+    pids = _running_heidi_pids()
+    for pid in pids:
+        subprocess.run(
+            ["osascript", "-e",
+             f'tell application "System Events" to '
+             f'(first process whose unix id is {pid}) to quit'],
+            capture_output=True,
+        )
+    if not pids:
+        # Nothing matched by PID — fall back to a best-effort quit by name.
+        for n in names:
+            subprocess.run(["osascript", "-e", f'tell application "{n}" to quit'],
+                           capture_output=True)
     time.sleep(3.0)
     # Prefer an explicit bundle path if one is configured.
     app_path = os.environ.get("HEIDI_APP_PATH")
-    if not app_name and app_path and Path(app_path).exists():
+    if app_path and Path(app_path).exists():
         subprocess.run(["open", "-a", app_path], capture_output=True)
         return
     # Relaunch the first name that exists as an app bundle.
