@@ -147,7 +147,7 @@ Useful knobs (env vars):
 |---|---|---|
 | `TRANSCRIPT_MATCH_THRESHOLD` | 0.9 | Min transcription accuracy (fraction of keywords found). Set `0.6` for a loose smoke run |
 | `RECORD_VIDEO` | 1 | Set `0` to skip per-test screen video (faster) |
-| `HEIDI_APP_PATH` | — | Point at a specific `.app` build |
+| `HEIDI_APP_PATH` + `HEIDI_APP_NAME` | — | Point at a specific `.app` build. **Set as a pair** — PATH decides which bundle `open` launches, NAME is what attach/`by_name` uses. For prod/staging switching, `source env/prod.env` or `source env/staging.env` (see README → "Choosing which Heidi build to test") |
 
 > **Don't touch the Heidi window while a test runs.** A backgrounded WKWebView
 > stops publishing its AX tree and the run will read empty. On a CI Mac, make

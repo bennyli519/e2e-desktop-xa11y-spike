@@ -181,6 +181,40 @@ HEIDI_EXE_PATH="C:\Users\you\AppData\Local\Heidi\Heidi.exe" pytest  # Windows
 HEIDI_APP_NAME="Heidi(Staging)" pytest  # different app/AX name for open -a + by_name
 ```
 
+> ⚠️ **`HEIDI_APP_NAME` and `HEIDI_APP_PATH` are a PAIR.** `HEIDI_APP_PATH`
+> decides which bundle `open` launches; `HEIDI_APP_NAME` is what `activate` /
+> `by_name` use to attach and bring frontmost. Set only one and you get "launch
+> bundle A, but attach the other same-named window B". Always set both together.
+
+#### Switching between prod / staging (per-env files)
+
+If this machine has several Heidi builds with **different bundle names**
+(e.g. prod is `Heidi`, staging is `Heidi(Staging)`), don't retype the pair each
+run — `source` a per-env file that sets both variables together. Two are
+committed under `env/`:
+
+| File | NAME | PATH |
+|---|---|---|
+| `env/prod.env` | `Heidi` | `/Applications/Heidi.app` |
+| `env/staging.env` | `Heidi(Staging)` | `/Applications/Heidi(Staging).app` |
+
+```bash
+source env/staging.env && pytest tests/scribe   # test staging
+source env/prod.env    && pytest tests/scribe   # test prod
+```
+
+Add a new build by dropping another file in `env/` with the matching
+`export HEIDI_APP_NAME=...` / `export HEIDI_APP_PATH=...` pair.
+
+> These files hold only the app name + path (no secrets). Note `.gitignore`'s
+> `*.env` rule excludes them by default — `git add -f env/*.env` if you want to
+> share them with the team. Credentials stay in `.env.e2e` (separately ignored).
+>
+> **Attaching to an already-running build launched from elsewhere** (e.g. a
+> `.app` run straight from a mounted `/Volumes/...` DMG, not `/Applications`):
+> `open -a` would start the `/Applications` copy instead, so attach by PID —
+> `HEIDI_PID=<pid> pytest ...` (find it with `pgrep -fl Heidi`).
+
 PowerShell example for a non-standard Windows install:
 
 ```powershell
