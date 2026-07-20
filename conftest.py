@@ -7,6 +7,7 @@ process doesn't inherit the permission on macOS 26.
 """
 import json
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -86,8 +87,14 @@ def _pid_for_exe(exe_match: str) -> int | None:
     GPU/renderer helpers) that share the path but carry extra CLI args.
     """
     try:
+        # -f matches against the full argv; pass the pattern as a FIXED string
+        # (grep -F semantics via pgrep's -F is not portable, so escape instead)
+        # macOS pgrep treats the pattern as an extended regex — a bundle name
+        # like "Heidi(Staging)" would have its parens interpreted as a regex
+        # group and never match the literal path. re.escape() neutralises that.
         out = subprocess.run(
-            ["pgrep", "-f", exe_match], capture_output=True, text=True, timeout=5
+            ["pgrep", "-f", re.escape(exe_match)],
+            capture_output=True, text=True, timeout=5,
         ).stdout
     except Exception:
         return None
@@ -357,6 +364,24 @@ _DEFAULT_RECORD_VIDEO = "0" if IS_WINDOWS else "1"
 RECORD_VIDEO = os.environ.get("RECORD_VIDEO", _DEFAULT_RECORD_VIDEO) != "0"
 
 
+def pytest_configure(config):
+    """Pin ONE timestamped run directory for this whole pytest session.
+
+    Artifacts (videos + failure screenshots) are grouped as:
+        reports/artifacts/<RUN_TS>/<test-file>/<artifact>
+    one folder per run, one sub-folder per test case (module). Shared via an
+    env var so module-scoped recorders in feature conftests use the same dir.
+    """
+    if not os.environ.get("HEIDI_E2E_RUN_DIR"):
+        ts = time.strftime("%Y-%m-%d_%H-%M-%S")
+        os.environ["HEIDI_E2E_RUN_DIR"] = str(ARTIFACTS / ts)
+
+
+def _run_dir() -> Path:
+    d = os.environ.get("HEIDI_E2E_RUN_DIR")
+    return Path(d) if d else ARTIFACTS
+
+
 def _safe_name(nodeid: str) -> str:
     """Turn a pytest nodeid into a filesystem-safe stem."""
     return (
@@ -368,55 +393,61 @@ def _safe_name(nodeid: str) -> str:
     )
 
 
+def _case_dir(nodeid: str) -> Path:
+    """Per-test-case artifact folder: <RUN_TS>/<test-file-stem>/ (created)."""
+    path_part = nodeid.split("::")[0]           # tests/scribe/test_tcd004_x.py
+    stem = Path(path_part).stem                 # test_tcd004_x
+    d = _run_dir() / stem
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _test_label(nodeid: str) -> str:
+    """The test-function portion of a nodeid, safe for a filename."""
+    parts = nodeid.split("::")
+    label = "__".join(parts[1:]) if len(parts) > 1 else parts[0]
+    return _safe_name(label)
+
+
+def _start_screencapture(video_path: Path):
+    """Backward-compat wrapper — see lib.recording.start_screencapture."""
+    from lib.recording import start_screencapture
+    return start_screencapture(video_path)
+
+
+def _stop_screencapture(proc) -> None:
+    """Backward-compat wrapper — see lib.recording.stop_screencapture."""
+    from lib.recording import stop_screencapture
+    stop_screencapture(proc)
+
+
 @pytest.fixture(autouse=True)
 def record_test(request):
     """Record a screen video of each test via macOS `screencapture -v`.
 
-    - One .mp4 per test under reports/artifacts/.
+    - One .mp4 per test under reports/artifacts/<RUN_TS>/<test-file>/.
     - screencapture is built into macOS (no ffmpeg needed).
     - Requires Screen Recording permission (already needed for xa11y).
     - Set RECORD_VIDEO=0 to disable.
+    - Tests marked `flow_video` are SKIPPED here: their real work happens in a
+      module-scoped fixture (run-once, assert-many), so per-test recording would
+      only capture the ~1s assertion. Those suites record at the MODULE level
+      instead (see the feature conftest's module-scoped recorder).
     """
-    if not RECORD_VIDEO:
+    if not RECORD_VIDEO or sys.platform != "darwin":
+        yield
+        return
+    if request.node.get_closest_marker("flow_video"):
         yield
         return
 
-    # Screen video uses macOS `screencapture`. On other platforms skip recording
-    # (the tests still run; you just don't get per-test video).
-    if sys.platform != "darwin":
-        yield
-        return
-
-    ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    stem = _safe_name(request.node.nodeid)
-    video_path = ARTIFACTS / f"{stem}.mp4"
-
-    # -v: video, -x: no sound, -C: capture cursor. Records the full screen.
-    # NOTE: screencapture -v only writes the file when stopped via SIGINT
-    # (Ctrl-C). Sending newline to stdin does NOT save it — must signal.
-    if video_path.exists():
-        video_path.unlink()
-    proc = subprocess.Popen(
-        ["screencapture", "-v", "-x", "-C", str(video_path)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    time.sleep(1.0)  # let the recorder spin up
-
+    nodeid = request.node.nodeid
+    video_path = _case_dir(nodeid) / f"{_test_label(nodeid)}.mp4"
+    proc = _start_screencapture(video_path)
     try:
         yield
     finally:
-        # Stop with SIGINT so screencapture flushes and writes the .mp4.
-        try:
-            proc.send_signal(signal.SIGINT)
-            proc.wait(timeout=15)
-        except Exception:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                proc.kill()
+        _stop_screencapture(proc)
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -425,9 +456,8 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
     if report.when == "call" and report.failed:
-        ARTIFACTS.mkdir(parents=True, exist_ok=True)
-        stem = _safe_name(item.nodeid)
+        png = _case_dir(item.nodeid) / f"{_test_label(item.nodeid)}__FAIL.png"
         try:
-            xa11y.screenshot().save_png(str(ARTIFACTS / f"{stem}__FAIL.png"))
+            xa11y.screenshot().save_png(str(png))
         except Exception:
             pass  # capture failure must not mask the test failure
