@@ -179,17 +179,23 @@ def _reach_fresh_session(heidi_app: xa11y.App) -> ScribePage:
     is_logged_in() falsely report 'not logged in' and skip the whole flow.
     """
     from lib import activate_app
+    import os as _os
     import subprocess as _sp
 
     def _force_front():
-        # `open -a` un-minimises and raises the window (more reliable than
-        # osascript 'activate', which can't restore a minimised window or reach
-        # another Space). Follow with activate_app for good measure.
-        try:
-            _sp.run(["open", "-a", "Heidi"], capture_output=True, timeout=8)
-        except Exception:
-            pass
-        activate_app("Heidi")
+        # Un-minimise + raise. Use `open -a <PATH>` (never the bare name
+        # "Heidi", which resolves via LaunchServices to the wrong same-named
+        # bundle — Parallels wrapper / DMG volume — and LAUNCHES A NEW instance
+        # every call). Target the exact bundle under test; fall back to
+        # PID-based activation only. The app is already running + attached, so
+        # this only fronts it, never spawns another.
+        app_path = _os.environ.get("HEIDI_APP_PATH")
+        if app_path:
+            try:
+                _sp.run(["open", "-a", app_path], capture_output=True, timeout=8)
+            except Exception:
+                pass
+        activate_app(pid=heidi_app.pid)
 
     # Foreground Heidi and give the AX tree time to repopulate, then check login
     # with retries. A backgrounded/minimised WKWebView returns a ~stub tree.
@@ -222,7 +228,7 @@ def _reach_fresh_session(heidi_app: xa11y.App) -> ScribePage:
     last_err = None
     for attempt in range(4):
         try:
-            activate_app("Heidi")
+            activate_app(pid=heidi_app.pid)
             # End any leftover recording so New session isn't blocked.
             if rec.is_recording():
                 rec.stop_recording()
@@ -307,7 +313,26 @@ def run_recording_flow(
         res.note_started = rec.wait_note_generation(timeout=90.0)
         res.note_completed = rec.wait_note_complete(timeout=240.0)
 
-        res.transcript = rec.transcript_text()
+        # Wait for the transcript to actually populate, then read it stably.
+        # note-complete does NOT imply the Transcript tab is filled — reading
+        # immediately grabs the "transcript will appear here" placeholder +
+        # sidebar noise (~10% accuracy). Same fix used by the upload &
+        # pause/resume flows: wait for content, then read the LONGEST
+        # static_text (transcript_text) until it's stable across 2 reads.
+        rec.wait_for_transcript_content(min_chars=100, timeout=180.0)
+        rec.open_tab("Transcript")
+        prev, stable = "", 0
+        for _ in range(20):
+            cur = rec.transcript_text()
+            if cur and cur == prev:
+                stable += 1
+                if stable >= 2:
+                    break
+            else:
+                stable = 0
+            prev = cur
+            time.sleep(3.0)
+        res.transcript = prev
         res.note = rec.note_text()
     except Exception as e:
         res.error = repr(e)
@@ -452,6 +477,16 @@ def run_upload_flow(
 
     try:
         rec = _reach_fresh_session(heidi_app)
+
+        # Ensure the record control is in Transcribe mode before touching the
+        # Context tab. A PRIOR test that left the app in Dictate mode changes the
+        # Context-tab layout so the paperclip upload button isn't reachable —
+        # resetting to Transcribe here makes context upload deterministic
+        # regardless of the previous case (e.g. TCD007 dictate → TCD008).
+        try:
+            rec.select_recording_mode("Transcribe")
+        except Exception:
+            pass
 
         # For TCD008: upload the CONTEXT file FIRST (on the Context tab), before
         # the audio — so the context is attached to the session when the note
