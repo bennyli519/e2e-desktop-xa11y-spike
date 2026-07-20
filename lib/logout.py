@@ -15,6 +15,7 @@ relaunching brings the app back to the login screen. This mirrors what
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -57,8 +58,10 @@ def clear_token_caches() -> list[Path]:
 
 def _running_heidi_pids() -> list[int]:
     try:
+        # pgrep -f treats the pattern as a regex; the "(Staging)" parens must be
+        # escaped or the literal bundle path never matches (see conftest bug).
         out = subprocess.run(
-            ["pgrep", "-f", "Heidi(Staging).app/Contents/MacOS"],
+            ["pgrep", "-f", re.escape("Heidi(Staging).app/Contents/MacOS")],
             capture_output=True, text=True, timeout=5,
         ).stdout
     except Exception:
